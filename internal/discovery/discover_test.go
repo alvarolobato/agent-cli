@@ -25,3 +25,14 @@ func TestProcessScannerWithMockedProcessList(t *testing.T) {
 		t.Fatalf("expected first agent elastic-agent, got %q", agents[0].ID())
 	}
 }
+
+func TestProcessScannerWithNilProviderUsesDefault(t *testing.T) {
+	strategy := NewProcessScannerWithProvider(nil)
+	agents, err := strategy.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	if len(agents) != 0 {
+		t.Fatalf("expected 0 agents from default provider, got %d", len(agents))
+	}
+}

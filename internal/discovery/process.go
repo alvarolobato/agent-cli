@@ -27,6 +27,9 @@ func NewProcessScanner() Strategy {
 
 // NewProcessScannerWithProvider creates a process scanner with a custom process source.
 func NewProcessScannerWithProvider(provider ProcessProvider) Strategy {
+	if provider == nil {
+		provider = defaultProcessProvider
+	}
 	return &processScanner{listProcesses: provider}
 }
 

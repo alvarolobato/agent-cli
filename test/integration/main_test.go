@@ -24,12 +24,25 @@ func TestServicesReachable(t *testing.T) {
 	}
 
 	for _, target := range targets {
-		conn, err := net.DialTimeout("tcp", target, 2*time.Second)
-		if err != nil {
-			t.Fatalf("service %s is not reachable: %v", target, err)
+		deadline := time.Now().Add(15 * time.Second)
+		var lastErr error
+
+		for time.Now().Before(deadline) {
+			conn, err := net.DialTimeout("tcp", target, 2*time.Second)
+			if err == nil {
+				if closeErr := conn.Close(); closeErr != nil {
+					t.Fatalf("service %s close failed: %v", target, closeErr)
+				}
+				lastErr = nil
+				break
+			}
+
+			lastErr = err
+			time.Sleep(250 * time.Millisecond)
 		}
-		if err := conn.Close(); err != nil {
-			t.Fatalf("service %s close failed: %v", target, err)
+
+		if lastErr != nil {
+			t.Fatalf("service %s is not reachable after retries: %v", target, lastErr)
 		}
 	}
 
