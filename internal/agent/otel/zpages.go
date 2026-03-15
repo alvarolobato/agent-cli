@@ -1,4 +1,4 @@
-package edot
+package otel
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 const defaultZPagesURL = "http://localhost:55679"
 
-// ZPagesClient reads EDOT/OTel zpages endpoints.
+// ZPagesClient reads OTel zpages endpoints.
 type ZPagesClient struct {
 	baseURL    string
 	httpClient *http.Client
@@ -194,12 +194,6 @@ func normalizeComponents(defaultKind string, components []ComponentStatus) []Com
 
 func parsePipelinezHTML(html string) ([]PipelineStatus, error) {
 	// HTML fallback only supports a deterministic mock shape using data attributes.
-	// Real OTel pipelinez output is handled through the JSON path above.
-	//
-	// <tr data-pipeline="traces" data-kind="receiver" data-component="otlp" data-status="StatusOK" data-error=""></tr>
-	//
-	// If an environment returns plain pipelinez HTML without these attributes,
-	// callers should switch to JSON responses for robust parsing.
 	rowRe := regexp.MustCompile(`(?is)<tr[^>]*data-pipeline="([^"]+)"[^>]*data-kind="([^"]+)"[^>]*data-component="([^"]+)"[^>]*data-status="([^"]*)"[^>]*data-error="([^"]*)"[^>]*>`)
 	matches := rowRe.FindAllStringSubmatch(html, -1)
 	if len(matches) == 0 {
@@ -284,8 +278,8 @@ func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
 		exporters  []ComponentStatus
 		seen       map[string]bool
 	}
-	byPipeline := map[string]*pipelineParts{}
 
+	byPipeline := map[string]*pipelineParts{}
 	for _, match := range matches {
 		pipelineName, _ := url.QueryUnescape(strings.TrimSpace(match[1]))
 		componentName, _ := url.QueryUnescape(strings.TrimSpace(match[2]))
@@ -300,16 +294,16 @@ func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
 			parts = &pipelineParts{seen: map[string]bool{}}
 			byPipeline[pipelineName] = parts
 		}
+		component := ComponentStatus{
+			ID:   componentName,
+			Kind: kind,
+		}
 		componentKey := kind + "|" + componentName
 		if parts.seen[componentKey] {
 			continue
 		}
 		parts.seen[componentKey] = true
 
-		component := ComponentStatus{
-			ID:   componentName,
-			Kind: kind,
-		}
 		switch kind {
 		case "receiver":
 			parts.receivers = append(parts.receivers, component)
@@ -336,6 +330,5 @@ func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
 			Exporters:  parts.exporters,
 		})
 	}
-
 	return out, nil
 }

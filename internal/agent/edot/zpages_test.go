@@ -117,9 +117,9 @@ func TestZPagesClientGetPipelineTopologyHTML(t *testing.T) {
 func TestParsePipelinezHTMLUnsupportedShapeError(t *testing.T) {
 	_, err := parsePipelinezHTML(`<html><body><table><tr><td>plain-html-without-data-attrs</td></tr></table></body></html>`)
 	if err == nil {
-		t.Fatalf("expected parsePipelinezHTML to fail without fallback data attributes")
+		t.Fatalf("expected parsePipelinezHTML to fail when no pipeline links are present")
 	}
-	if !strings.Contains(err.Error(), "supported fallback expects") {
-		t.Fatalf("expected explicit fallback limitation in error, got %q", err.Error())
+	if !strings.Contains(err.Error(), "no pipeline rows found in html") {
+		t.Fatalf("expected explicit no-pipeline error, got %q", err.Error())
 	}
 }

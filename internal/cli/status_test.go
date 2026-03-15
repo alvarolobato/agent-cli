@@ -132,3 +132,56 @@ func TestStatusCommandJSONEDOT(t *testing.T) {
 		t.Fatalf("expected EDOT receiver nodes in JSON output, got %s", payload)
 	}
 }
+
+func TestStatusCommandJSONOTel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/debug/pipelinez":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"pipelines":[
+					{
+						"name":"metrics",
+						"receivers":[{"id":"otlp","status":"StatusOK"}],
+						"processors":[{"id":"batch","status":"StatusOK"}],
+						"exporters":[{"id":"debug","status":"StatusOK"}]
+					}
+				]
+			}`))
+		case "/debug/tracez":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/metrics":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(`otelcol_receiver_accepted_metric_points{receiver="otlp"} 100`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cmd := newStatusCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"--agent", "otel",
+		"--format", "json",
+		"--otel-config", "../../test/fixtures/otel-config.yaml",
+		"--otel-zpages-url", server.URL,
+		"--otel-metrics-url", server.URL + "/metrics",
+		"--otel-health-url", server.URL + "/",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	payload := strings.TrimSpace(out.String())
+	if !json.Valid([]byte(payload)) {
+		t.Fatalf("expected valid JSON output, got %s", payload)
+	}
+	if !strings.Contains(payload, `"label": "OTLP receiver"`) {
+		t.Fatalf("expected friendly OTLP label in OTel JSON output, got %s", payload)
+	}
+}
