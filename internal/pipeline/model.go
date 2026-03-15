@@ -22,10 +22,10 @@ type Node struct {
 
 // NodeMetrics holds the P0 metrics rendered per pipeline node.
 type NodeMetrics struct {
-	EventsInPerSec  float64 `json:"events_in_per_sec,omitempty"`
-	EventsOutPerSec float64 `json:"events_out_per_sec,omitempty"`
-	ErrorCount      float64 `json:"error_count,omitempty"`
-	DropCount       float64 `json:"drop_count,omitempty"`
+	EventsInPerSec  float64 `json:"events_in_per_sec"`
+	EventsOutPerSec float64 `json:"events_out_per_sec"`
+	ErrorCount      float64 `json:"error_count"`
+	DropCount       float64 `json:"drop_count"`
 }
 
 // Edge is a directional connection between nodes.

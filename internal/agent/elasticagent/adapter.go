@@ -3,6 +3,7 @@ package elasticagent
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,7 +82,13 @@ func (a *Adapter) Status(ctx context.Context) (*pipeline.Pipeline, error) {
 	metricsByEndpoint := map[string]*pipeline.NodeMetrics{}
 
 	outputNodeIDs := make(map[string]string, len(a.cfg.Outputs))
+	outputNames := make([]string, 0, len(a.cfg.Outputs))
 	for outputName := range a.cfg.Outputs {
+		outputNames = append(outputNames, outputName)
+	}
+	sort.Strings(outputNames)
+
+	for _, outputName := range outputNames {
 		status := resolveOutputStatus(outputName, components)
 		nodeID := fmt.Sprintf("output.%s", outputName)
 		outputNodeIDs[outputName] = nodeID
@@ -199,8 +206,10 @@ func indexComponents(components []ComponentInfo) componentIndex {
 
 func resolveInputStatus(in config.ElasticInput, components componentIndex) pipeline.HealthStatus {
 	candidates := []string{
-		in.ID,
+		fmt.Sprintf("%s-%s", in.Type, in.UseOutput),
+		fmt.Sprintf("%s/%s", in.Type, in.UseOutput),
 		in.Type,
+		in.ID,
 		fmt.Sprintf("%s-%s", in.ID, in.UseOutput),
 	}
 	return resolveByCandidates(candidates, components)

@@ -32,7 +32,7 @@ func newTUICommand() *cobra.Command {
 	cmd.Flags().BoolVar(&live, "live", false, "Enable live mode auto-refresh")
 	cmd.Flags().DurationVar(&refresh, "refresh", 5*time.Second, "Refresh interval in live mode")
 	cmd.Flags().StringVar(&agentType, "agent", "", "Target a specific agent type")
-	cmd.Flags().StringVar(&elasticConfigPath, "elastic-config", "test/fixtures/elastic-agent.yml", "Path to elastic-agent.yml")
+	cmd.Flags().StringVar(&elasticConfigPath, "elastic-config", "", "Path to elastic-agent.yml (auto-detected when omitted)")
 	cmd.Flags().StringVar(&elasticStatusURL, "elastic-url", "http://localhost:6791", "Elastic Agent status API base URL")
 
 	return cmd

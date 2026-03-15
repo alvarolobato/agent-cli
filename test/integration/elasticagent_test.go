@@ -3,6 +3,8 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,10 +66,15 @@ func TestElasticAgentStatsEndpointReachable(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(45 * time.Second)
+	client := &http.Client{Timeout: 3 * time.Second}
 	for time.Now().Before(deadline) {
-		cmd := exec.Command("sh", "-c", "curl -fsS http://127.0.0.1:6791/stats >/dev/null")
-		if err := cmd.Run(); err == nil {
-			return
+		resp, err := client.Get("http://127.0.0.1:6791/stats")
+		if err == nil {
+			_, _ = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
 		}
 		time.Sleep(1 * time.Second)
 	}

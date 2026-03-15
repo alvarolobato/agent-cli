@@ -23,13 +23,13 @@ func AssessHealth(node *Node) HealthStatus {
 
 func mapStateToHealth(state string) HealthStatus {
 	switch strings.ToUpper(strings.TrimSpace(state)) {
-	case "HEALTHY", "RUNNING", "OK", string(Healthy):
+	case "HEALTHY", "RUNNING", "OK":
 		return Healthy
-	case "DEGRADED", "WARNING", "WARN", string(Degraded):
+	case "DEGRADED", "WARNING", "WARN":
 		return Degraded
-	case "FAILED", "ERROR", string(Error):
+	case "FAILED", "ERROR":
 		return Error
-	case "DISABLED", "STOPPED", string(Disabled):
+	case "DISABLED", "STOPPED":
 		return Disabled
 	default:
 		return Unknown

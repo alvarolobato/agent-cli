@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/alvarolobato/agent-cli/internal/agent/elasticagent"
@@ -48,7 +50,7 @@ func newStatusCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&agentType, "agent", "", "Target a specific agent type")
 	cmd.Flags().StringVar(&format, "format", "table", fmt.Sprintf("Output format (%s)", "table|json"))
-	cmd.Flags().StringVar(&elasticConfigPath, "elastic-config", "test/fixtures/elastic-agent.yml", "Path to elastic-agent.yml")
+	cmd.Flags().StringVar(&elasticConfigPath, "elastic-config", "", "Path to elastic-agent.yml (auto-detected when omitted)")
 	cmd.Flags().StringVar(&elasticStatusURL, "elastic-url", "http://localhost:6791", "Elastic Agent status API base URL")
 
 	return cmd
@@ -62,7 +64,12 @@ func statusPipeline(cmd *cobra.Command, agentType, elasticConfigPath, elasticSta
 		return nil, fmt.Errorf("unsupported --agent value %q", agentType)
 	}
 
-	cfg, err := config.ParseElasticAgentConfig(elasticConfigPath)
+	configPath, err := resolveElasticConfigPath(elasticConfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := config.ParseElasticAgentConfig(configPath)
 	if err != nil {
 		return nil, err
 	}
@@ -75,4 +82,29 @@ func statusPipeline(cmd *cobra.Command, agentType, elasticConfigPath, elasticSta
 		ctx = context.Background()
 	}
 	return adapter.Status(ctx)
+}
+
+func resolveElasticConfigPath(explicitPath string) (string, error) {
+	if explicitPath != "" {
+		return explicitPath, nil
+	}
+
+	for _, candidate := range defaultElasticConfigPaths() {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", errors.New("elastic agent config not found; pass --elastic-config")
+}
+
+func defaultElasticConfigPaths() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"/Library/Elastic/Agent/elastic-agent.yml"}
+	case "windows":
+		return []string{`C:\Program Files\Elastic\Agent\elastic-agent.yml`}
+	default:
+		return []string{"/opt/Elastic/Agent/elastic-agent.yml"}
+	}
 }
