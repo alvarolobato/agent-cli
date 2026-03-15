@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -73,6 +74,120 @@ func ParseElasticAgentConfigBytes(data []byte) (*ElasticAgentConfig, error) {
 	if cfg.Outputs == nil {
 		cfg.Outputs = map[string]ElasticOutput{}
 	}
+	augmentFromOTELPipelines(data, &cfg)
 
 	return &cfg, nil
+}
+
+type otelPipelineConfig struct {
+	Exporters map[string]otelExporter `yaml:"exporters"`
+	Service   struct {
+		Pipelines map[string]otelServicePipeline `yaml:"pipelines"`
+	} `yaml:"service"`
+}
+
+type otelExporter struct {
+	Type      string   `yaml:"type"`
+	Endpoints []string `yaml:"endpoints"`
+	Hosts     []string `yaml:"hosts"`
+}
+
+type otelServicePipeline struct {
+	Receivers []string `yaml:"receivers"`
+	Exporters []string `yaml:"exporters"`
+}
+
+// augmentFromOTELPipelines maps OTel-style pipelines into ElasticAgentConfig fields.
+func augmentFromOTELPipelines(data []byte, cfg *ElasticAgentConfig) {
+	if cfg == nil {
+		return
+	}
+
+	var otelCfg otelPipelineConfig
+	if err := yaml.Unmarshal(data, &otelCfg); err != nil {
+		return
+	}
+	if len(otelCfg.Service.Pipelines) == 0 && len(otelCfg.Exporters) == 0 {
+		return
+	}
+	if cfg.Outputs == nil {
+		cfg.Outputs = map[string]ElasticOutput{}
+	}
+
+	for exporterName, exporter := range otelCfg.Exporters {
+		key := strings.TrimSpace(exporterName)
+		if key == "" {
+			continue
+		}
+		if _, exists := cfg.Outputs[key]; exists {
+			continue
+		}
+		hosts := exporter.Hosts
+		if len(hosts) == 0 {
+			hosts = exporter.Endpoints
+		}
+		cfg.Outputs[key] = ElasticOutput{
+			Type:  nonEmpty(exporter.Type, segmentBeforeSlash(key)),
+			Hosts: hosts,
+		}
+	}
+
+	existing := make(map[string]struct{}, len(cfg.Inputs))
+	for _, in := range cfg.Inputs {
+		existing[inputKey(in.ID, in.UseOutput)] = struct{}{}
+	}
+
+	for _, servicePipeline := range otelCfg.Service.Pipelines {
+		useOutput := firstNonEmpty(servicePipeline.Exporters...)
+		if useOutput == "" {
+			useOutput = "default"
+		}
+		for _, receiver := range servicePipeline.Receivers {
+			id := strings.TrimSpace(receiver)
+			if id == "" {
+				continue
+			}
+			key := inputKey(id, useOutput)
+			if _, seen := existing[key]; seen {
+				continue
+			}
+			cfg.Inputs = append(cfg.Inputs, ElasticInput{
+				ID:        id,
+				Type:      segmentBeforeSlash(id),
+				Enabled:   true,
+				UseOutput: useOutput,
+			})
+			existing[key] = struct{}{}
+		}
+	}
+}
+
+func inputKey(id, output string) string {
+	return strings.TrimSpace(id) + "\x00" + strings.TrimSpace(output)
+}
+
+func segmentBeforeSlash(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	idx := strings.Index(trimmed, "/")
+	if idx <= 0 {
+		return trimmed
+	}
+	return trimmed[:idx]
+}
+
+func nonEmpty(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	return nonEmpty(values...)
 }
