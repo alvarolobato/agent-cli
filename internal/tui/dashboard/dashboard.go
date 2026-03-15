@@ -58,9 +58,9 @@ func (m *Model) MoveDown() {
 }
 
 func (m Model) View() string {
-	inputs := renderColumn(m.items[0], m.nodesByKind("input"))
-	processors := renderColumn(m.items[1], m.nodesByKind("processor"))
-	outputs := renderColumn(m.items[2], m.nodesByKind("output"))
+	inputs := renderColumn(m.items[0], m.nodesByKind("input"), m.cursor == 0)
+	processors := renderColumn(m.items[1], m.nodesByKind("processor"), m.cursor == 1)
+	outputs := renderColumn(m.items[2], m.nodesByKind("output"), m.cursor == 2)
 	return lipgloss.JoinHorizontal(lipgloss.Top, inputs, processors, outputs)
 }
 
@@ -77,9 +77,13 @@ func (m Model) nodesByKind(kind string) []pipeline.Node {
 	return nodes
 }
 
-func renderColumn(title string, nodes []pipeline.Node) string {
+func renderColumn(title string, nodes []pipeline.Node, selected bool) string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(title))
+	if selected {
+		b.WriteString(titleStyle.Underline(true).Render(title))
+	} else {
+		b.WriteString(titleStyle.Render(title))
+	}
 	b.WriteString("\n")
 
 	if len(nodes) == 0 {

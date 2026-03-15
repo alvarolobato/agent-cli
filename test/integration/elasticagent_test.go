@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,12 +20,23 @@ func TestElasticAgent(t *testing.T) {
 	}
 
 	repoRoot := filepath.Join("..", "..")
+	binaryPath := filepath.Join(t.TempDir(), "agent-cli-test")
+	if runtime.GOOS == "windows" {
+		binaryPath += ".exe"
+	}
+	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/agent-cli")
+	buildCmd.Dir = repoRoot
+	buildCmd.Env = os.Environ()
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build agent-cli binary failed: %v\noutput:\n%s", err, string(out))
+	}
+
 	var output bytes.Buffer
 	deadline := time.Now().Add(90 * time.Second)
 	var runErr error
 	for time.Now().Before(deadline) {
 		cmd := exec.Command(
-			"go", "run", "./cmd/agent-cli", "status",
+			binaryPath, "status",
 			"--agent", "elastic-agent",
 			"--format", "json",
 			"--elastic-config", "test/integration/elastic-agent.yml",
