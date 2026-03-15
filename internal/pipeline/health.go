@@ -35,3 +35,38 @@ func mapStateToHealth(state string) HealthStatus {
 		return Unknown
 	}
 }
+
+// MapOTelRuntimeStatus normalizes OTel component runtime states.
+func MapOTelRuntimeStatus(status string) HealthStatus {
+	switch strings.TrimSpace(status) {
+	case "StatusOK":
+		return Healthy
+	case "StatusRecoverableError":
+		return Degraded
+	case "StatusPermanentError", "StatusFatalError":
+		return Error
+	case "StatusStopped":
+		return Disabled
+	case "", "StatusNone", "StatusStarting", "StatusUnknown":
+		return Unknown
+	default:
+		return mapStateToHealth(status)
+	}
+}
+
+// AssessOTelComponentHealth combines runtime state with error/drop counters.
+func AssessOTelComponentHealth(current HealthStatus, sendFailed, dropped float64, enabled bool) HealthStatus {
+	if !enabled {
+		return Disabled
+	}
+	if sendFailed > 0 {
+		return Error
+	}
+	if dropped > 0 && current != Error {
+		return Degraded
+	}
+	if current == Unknown {
+		return Unknown
+	}
+	return current
+}

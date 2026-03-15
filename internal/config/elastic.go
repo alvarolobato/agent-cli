@@ -79,32 +79,14 @@ func ParseElasticAgentConfigBytes(data []byte) (*ElasticAgentConfig, error) {
 	return &cfg, nil
 }
 
-type otelPipelineConfig struct {
-	Exporters map[string]otelExporter `yaml:"exporters"`
-	Service   struct {
-		Pipelines map[string]otelServicePipeline `yaml:"pipelines"`
-	} `yaml:"service"`
-}
-
-type otelExporter struct {
-	Type      string   `yaml:"type"`
-	Endpoints []string `yaml:"endpoints"`
-	Hosts     []string `yaml:"hosts"`
-}
-
-type otelServicePipeline struct {
-	Receivers []string `yaml:"receivers"`
-	Exporters []string `yaml:"exporters"`
-}
-
 // augmentFromOTELPipelines maps OTel-style pipelines into ElasticAgentConfig fields.
 func augmentFromOTELPipelines(data []byte, cfg *ElasticAgentConfig) {
 	if cfg == nil {
 		return
 	}
 
-	var otelCfg otelPipelineConfig
-	if err := yaml.Unmarshal(data, &otelCfg); err != nil {
+	otelCfg, err := ParseOTelCollectorConfigBytes(data)
+	if err != nil {
 		return
 	}
 	if len(otelCfg.Service.Pipelines) == 0 && len(otelCfg.Exporters) == 0 {
@@ -122,9 +104,9 @@ func augmentFromOTELPipelines(data []byte, cfg *ElasticAgentConfig) {
 		if _, exists := cfg.Outputs[key]; exists {
 			continue
 		}
-		hosts := exporter.Hosts
+		hosts := stringSliceFromRaw(exporter.Raw, "hosts")
 		if len(hosts) == 0 {
-			hosts = exporter.Endpoints
+			hosts = stringSliceFromRaw(exporter.Raw, "endpoints")
 		}
 		cfg.Outputs[key] = ElasticOutput{
 			Type:  nonEmpty(exporter.Type, segmentBeforeSlash(key)),
@@ -166,18 +148,6 @@ func inputKey(id, output string) string {
 	return strings.TrimSpace(id) + "\x00" + strings.TrimSpace(output)
 }
 
-func segmentBeforeSlash(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return ""
-	}
-	idx := strings.Index(trimmed, "/")
-	if idx <= 0 {
-		return trimmed
-	}
-	return trimmed[:idx]
-}
-
 func nonEmpty(values ...string) string {
 	for _, value := range values {
 		trimmed := strings.TrimSpace(value)
@@ -190,4 +160,28 @@ func nonEmpty(values ...string) string {
 
 func firstNonEmpty(values ...string) string {
 	return nonEmpty(values...)
+}
+
+func stringSliceFromRaw(raw map[string]interface{}, key string) []string {
+	values, ok := raw[key]
+	if !ok {
+		return nil
+	}
+	items, ok := values.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		str, ok := item.(string)
+		if !ok {
+			continue
+		}
+		str = strings.TrimSpace(str)
+		if str == "" {
+			continue
+		}
+		out = append(out, str)
+	}
+	return out
 }

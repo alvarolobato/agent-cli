@@ -28,7 +28,11 @@ func TestStatusPipelineElasticAgent(t *testing.T) {
 	defer server.Close()
 
 	cmd := newStatusCommand()
-	pipe, err := statusPipeline(cmd, "elastic-agent", "../../test/fixtures/elastic-agent.yml", server.URL)
+	pipe, err := statusPipeline(cmd, statusOptions{
+		agentType:        "elastic-agent",
+		elasticConfig:    "../../test/fixtures/elastic-agent.yml",
+		elasticStatusURL: server.URL,
+	})
 	if err != nil {
 		t.Fatalf("statusPipeline() error = %v", err)
 	}
@@ -73,5 +77,58 @@ func TestStatusCommandJSONElasticAgent(t *testing.T) {
 	payload := strings.TrimSpace(out.String())
 	if !json.Valid([]byte(payload)) {
 		t.Fatalf("expected valid JSON output, got %s", payload)
+	}
+}
+
+func TestStatusCommandJSONEDOT(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/debug/pipelinez":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"pipelines":[
+					{
+						"name":"traces",
+						"receivers":[{"id":"otlp","status":"StatusOK"}],
+						"processors":[{"id":"batch","status":"StatusOK"}],
+						"exporters":[{"id":"debug","status":"StatusOK"}]
+					}
+				]
+			}`))
+		case "/debug/tracez":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		case "/metrics":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(`otelcol_receiver_accepted_spans{receiver="otlp"} 100`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cmd := newStatusCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"--agent", "edot",
+		"--format", "json",
+		"--edot-config", "../../test/fixtures/edot-config.yaml",
+		"--edot-zpages-url", server.URL,
+		"--edot-metrics-url", server.URL + "/metrics",
+		"--edot-health-url", server.URL + "/",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	payload := strings.TrimSpace(out.String())
+	if !json.Valid([]byte(payload)) {
+		t.Fatalf("expected valid JSON output, got %s", payload)
+	}
+	if !strings.Contains(payload, `"kind": "receiver"`) {
+		t.Fatalf("expected EDOT receiver nodes in JSON output, got %s", payload)
 	}
 }

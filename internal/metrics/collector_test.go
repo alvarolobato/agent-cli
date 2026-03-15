@@ -29,7 +29,7 @@ func TestCollectBeatStatsMapsMetrics(t *testing.T) {
 			droppedOne = 3
 			droppedTwo = 2
 		}
-		_, _ = w.Write([]byte(fmt.Sprintf(`{
+		_, _ = fmt.Fprintf(w, `{
 			"libbeat": {
 				"pipeline": {"events": {"published": %d}},
 				"output": {"events": {"acked": %d, "failed": %d}}
@@ -38,7 +38,7 @@ func TestCollectBeatStatsMapsMetrics(t *testing.T) {
 				"elasticsearch": {"events": {"dropped": %d}},
 				"logstash": {"events": {"dropped": %d}}
 			}
-		}`, published, acked, failed, droppedOne, droppedTwo)))
+		}`, published, acked, failed, droppedOne, droppedTwo)
 	}))
 	defer server.Close()
 

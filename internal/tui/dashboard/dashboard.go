@@ -16,24 +16,23 @@ var (
 
 // Model renders a pipeline-first dashboard screen.
 type Model struct {
-	cursor int
-	items  []string
-	pipe   *pipeline.Pipeline
+	cursor   int
+	items    []string
+	pipe     *pipeline.Pipeline
+	usesOTel bool
 }
 
 // NewModel returns the initial dashboard state.
 func NewModel(p *pipeline.Pipeline) Model {
-	items := []string{
-		"Inputs",
-		"Processors",
-		"Outputs",
-	}
 	if p == nil {
 		p = pipeline.ExamplePipeline()
 	}
+	usesOTel := hasOTelKinds(p)
+	items := columnTitles(usesOTel)
 	return Model{
-		items: items,
-		pipe:  p,
+		items:    items,
+		pipe:     p,
+		usesOTel: usesOTel,
 	}
 }
 
@@ -58,10 +57,14 @@ func (m *Model) MoveDown() {
 }
 
 func (m Model) View() string {
-	inputs := renderColumn(m.items[0], m.nodesByKind("input"), m.cursor == 0)
+	leftKind, rightKind := "input", "output"
+	if m.usesOTel {
+		leftKind, rightKind = "receiver", "exporter"
+	}
+	left := renderColumn(m.items[0], m.nodesByKind(leftKind), m.cursor == 0)
 	processors := renderColumn(m.items[1], m.nodesByKind("processor"), m.cursor == 1)
-	outputs := renderColumn(m.items[2], m.nodesByKind("output"), m.cursor == 2)
-	return lipgloss.JoinHorizontal(lipgloss.Top, inputs, processors, outputs)
+	right := renderColumn(m.items[2], m.nodesByKind(rightKind), m.cursor == 2)
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, processors, right)
 }
 
 func (m Model) nodesByKind(kind string) []pipeline.Node {
@@ -116,4 +119,28 @@ func healthIcon(status pipeline.HealthStatus) string {
 	default:
 		return "?"
 	}
+}
+
+func hasOTelKinds(p *pipeline.Pipeline) bool {
+	if p == nil {
+		return false
+	}
+	hasReceiver := false
+	hasExporter := false
+	for _, node := range p.Nodes {
+		if node.Kind == "receiver" {
+			hasReceiver = true
+		}
+		if node.Kind == "exporter" {
+			hasExporter = true
+		}
+	}
+	return hasReceiver || hasExporter
+}
+
+func columnTitles(usesOTel bool) []string {
+	if usesOTel {
+		return []string{"Receivers", "Processors", "Exporters"}
+	}
+	return []string{"Inputs", "Processors", "Outputs"}
 }
