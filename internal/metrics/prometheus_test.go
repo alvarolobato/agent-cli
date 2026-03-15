@@ -59,3 +59,27 @@ func TestCollectOTelPrometheusHTTPError(t *testing.T) {
 		t.Fatalf("expected error when endpoint returns non-200")
 	}
 }
+
+func TestCollectOTelPrometheusIgnoresOptionalTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		_, _ = w.Write([]byte(`
+otelcol_exporter_sent_spans{exporter="elasticsearch"} 145200 1711111111000
+otelcol_exporter_send_failed_spans{exporter="elasticsearch"} 7 1711111111000
+`))
+	}))
+	defer server.Close()
+
+	collector := NewCollector(server.Client())
+	snapshot, err := collector.CollectOTelPrometheus(context.Background(), server.URL+"/metrics")
+	if err != nil {
+		t.Fatalf("CollectOTelPrometheus() error = %v", err)
+	}
+
+	if got := snapshot.Exporters["elasticsearch"].Sent; got != 145200 {
+		t.Fatalf("expected exporter sent total 145200, got %v", got)
+	}
+	if got := snapshot.Exporters["elasticsearch"].SendFailed; got != 7 {
+		t.Fatalf("expected exporter send_failed total 7, got %v", got)
+	}
+}

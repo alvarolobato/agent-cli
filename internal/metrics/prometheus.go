@@ -116,7 +116,9 @@ func parsePrometheusLine(line string) (string, map[string]string, float64, bool)
 	}
 
 	rawMetric := parts[0]
-	valuePart := parts[len(parts)-1]
+	// Prometheus exposition format allows an optional trailing timestamp.
+	// The sample value is always the token immediately following the metric+labels.
+	valuePart := parts[1]
 	value, err := strconv.ParseFloat(valuePart, 64)
 	if err != nil {
 		return "", nil, 0, false

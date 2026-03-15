@@ -16,6 +16,8 @@ Key capabilities:
 5. **Rich TUI** — interactive terminal UI (Phase 1) and **Config modification** (Phase 2).
 
 **Full requirements:** [project-requirements.md](project-requirements.md)
+**Implemented architecture:** [architecture.md](architecture.md)
+**Decision history:** [decision-log.md](decision-log.md)
 
 ---
 
@@ -140,12 +142,16 @@ When asked to address PR feedback: fetch the PR reviews and all conversation thr
 | Change Type | Update Required |
 |-------------|-----------------|
 | Add/remove package or major component | AGENTS.md (structure), README.md |
+| Architecture, data-flow, or technical boundary changes | architecture.md, decision-log.md, AGENTS.md (if guidance changes) |
+| Material technical decision (new pattern, tradeoff, limitation, fallback) | decision-log.md |
 | New CLI command | AGENTS.md (commands), internal/cli/ |
 | New agent adapter | AGENTS.md (supported agents), pkg/agentcli/ public API |
 | New TUI screen | AGENTS.md (TUI screens) |
 | CI/CD changes | AGENTS.md (CI pipeline section) |
 | New skill area | docs/skills/skills.md |
 | Spec-driven development / agent protocol | AGENT_LOOP_PROTOCOL.md, docs/skills/agent-loop-protocol.md, AGENTS.md |
+
+`architecture.md` and `decision-log.md` are living documents and must be updated in every PR that changes architecture or technical decisions.
 
 ---
 

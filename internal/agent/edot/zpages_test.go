@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -110,5 +111,15 @@ func TestZPagesClientGetPipelineTopologyHTML(t *testing.T) {
 	}
 	if len(p.Exporters) != 1 || p.Exporters[0].ID != "debug" {
 		t.Fatalf("expected exporter debug, got %#v", p.Exporters)
+	}
+}
+
+func TestParsePipelinezHTMLUnsupportedShapeError(t *testing.T) {
+	_, err := parsePipelinezHTML(`<html><body><table><tr><td>plain-html-without-data-attrs</td></tr></table></body></html>`)
+	if err == nil {
+		t.Fatalf("expected parsePipelinezHTML to fail without fallback data attributes")
+	}
+	if !strings.Contains(err.Error(), "supported fallback expects") {
+		t.Fatalf("expected explicit fallback limitation in error, got %q", err.Error())
 	}
 }
