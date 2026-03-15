@@ -16,9 +16,10 @@ var (
 
 // Model renders a pipeline-first dashboard screen.
 type Model struct {
-	cursor int
-	items  []string
-	pipe   *pipeline.Pipeline
+	cursor   int
+	items    []string
+	pipe     *pipeline.Pipeline
+	usesOTel bool
 }
 
 // NewModel returns the initial dashboard state.
@@ -26,10 +27,12 @@ func NewModel(p *pipeline.Pipeline) Model {
 	if p == nil {
 		p = pipeline.ExamplePipeline()
 	}
-	items := columnTitles(p)
+	usesOTel := hasOTelKinds(p)
+	items := columnTitles(usesOTel)
 	return Model{
-		items: items,
-		pipe:  p,
+		items:    items,
+		pipe:     p,
+		usesOTel: usesOTel,
 	}
 }
 
@@ -55,7 +58,7 @@ func (m *Model) MoveDown() {
 
 func (m Model) View() string {
 	leftKind, rightKind := "input", "output"
-	if m.usesOTelKinds() {
+	if m.usesOTel {
 		leftKind, rightKind = "receiver", "exporter"
 	}
 	left := renderColumn(m.items[0], m.nodesByKind(leftKind), m.cursor == 0)
@@ -118,24 +121,10 @@ func healthIcon(status pipeline.HealthStatus) string {
 	}
 }
 
-func (m Model) usesOTelKinds() bool {
-	if m.pipe == nil {
+func hasOTelKinds(p *pipeline.Pipeline) bool {
+	if p == nil {
 		return false
 	}
-	hasReceiver := false
-	hasExporter := false
-	for _, node := range m.pipe.Nodes {
-		if node.Kind == "receiver" {
-			hasReceiver = true
-		}
-		if node.Kind == "exporter" {
-			hasExporter = true
-		}
-	}
-	return hasReceiver || hasExporter
-}
-
-func columnTitles(p *pipeline.Pipeline) []string {
 	hasReceiver := false
 	hasExporter := false
 	for _, node := range p.Nodes {
@@ -146,7 +135,11 @@ func columnTitles(p *pipeline.Pipeline) []string {
 			hasExporter = true
 		}
 	}
-	if hasReceiver || hasExporter {
+	return hasReceiver || hasExporter
+}
+
+func columnTitles(usesOTel bool) []string {
+	if usesOTel {
 		return []string{"Receivers", "Processors", "Exporters"}
 	}
 	return []string{"Inputs", "Processors", "Outputs"}

@@ -131,9 +131,9 @@ func (a *Adapter) Status(ctx context.Context) (*pipeline.Pipeline, error) {
 
 	for _, pipelineName := range pipelineNames {
 		p := a.cfg.Service.Pipelines[pipelineName]
-		receivers := sortedCopy(p.Receivers)
-		processors := sortedCopy(p.Processors)
-		exporters := sortedCopy(p.Exporters)
+		receivers := copied(p.Receivers)
+		processors := copied(p.Processors)
+		exporters := copied(p.Exporters)
 
 		firstProcessOrExport := ""
 		if len(processors) > 0 {
@@ -376,9 +376,8 @@ func dedupeEdges(edges []pipeline.Edge) []pipeline.Edge {
 	return out
 }
 
-func sortedCopy(values []string) []string {
+func copied(values []string) []string {
 	out := append([]string(nil), values...)
-	sort.Strings(out)
 	return out
 }
 

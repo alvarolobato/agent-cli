@@ -142,3 +142,61 @@ func TestAdapterHealthUsesHealthCheckEndpoint(t *testing.T) {
 		t.Fatalf("expected health healthy, got %q", health)
 	}
 }
+
+func TestAdapterStatusPreservesProcessorOrderFromConfig(t *testing.T) {
+	cfg := &config.OTelCollectorConfig{
+		Service: config.OTelServiceConfig{
+			Pipelines: map[string]config.OTelPipelineConfig{
+				"logs": {
+					Receivers:  []string{"otlp"},
+					Processors: []string{"memory_limiter", "batch"},
+					Exporters:  []string{"debug"},
+				},
+			},
+		},
+	}
+
+	adapter := newAdapterWithDeps(
+		cfg,
+		&fakeZPages{
+			topology: &PipelineTopology{
+				Pipelines: []PipelineStatus{
+					{
+						Name:       "logs",
+						Receivers:  []ComponentStatus{{ID: "otlp", Status: "StatusOK"}},
+						Processors: []ComponentStatus{{ID: "memory_limiter", Status: "StatusOK"}, {ID: "batch", Status: "StatusOK"}},
+						Exporters:  []ComponentStatus{{ID: "debug", Status: "StatusOK"}},
+					},
+				},
+			},
+		},
+		nil,
+		nil,
+		"",
+		"",
+	)
+
+	got, err := adapter.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+
+	containsEdge := func(from, to string) bool {
+		for _, edge := range got.Edges {
+			if edge.From == from && edge.To == to {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !containsEdge("receiver.otlp", "processor.memory_limiter") {
+		t.Fatalf("expected receiver -> memory_limiter edge, got %#v", got.Edges)
+	}
+	if !containsEdge("processor.memory_limiter", "processor.batch") {
+		t.Fatalf("expected memory_limiter -> batch edge, got %#v", got.Edges)
+	}
+	if !containsEdge("processor.batch", "exporter.debug") {
+		t.Fatalf("expected batch -> exporter edge, got %#v", got.Edges)
+	}
+}
