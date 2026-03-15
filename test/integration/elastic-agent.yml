@@ -1,0 +1,25 @@
+agent.monitoring:
+  enabled: true
+  use_output: default
+  logs: true
+  metrics: true
+  http:
+    enabled: true
+    host: 0.0.0.0
+    port: 6791
+
+outputs:
+  default:
+    type: elasticsearch
+    hosts:
+      - "http://127.0.0.1:9200"
+
+inputs:
+  - id: system-logs
+    type: filestream
+    enabled: true
+    use_output: default
+    streams:
+      - id: syslog
+        paths:
+          - /var/log/*.log

@@ -12,7 +12,7 @@ func TestElasticAgentMockServer(t *testing.T) {
 	server := httptest.NewServer(ElasticAgentHandler())
 	defer server.Close()
 
-	resp, err := http.Get(server.URL)
+	resp, err := http.Get(server.URL + "/api/status")
 	if err != nil {
 		t.Fatalf("http.Get() error = %v", err)
 	}

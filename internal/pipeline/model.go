@@ -13,10 +13,19 @@ type Pipeline struct {
 
 // Node is a pipeline vertex.
 type Node struct {
-	ID     string       `json:"id"`
-	Label  string       `json:"label"`
-	Kind   string       `json:"kind"`
-	Status HealthStatus `json:"status"`
+	ID      string       `json:"id"`
+	Label   string       `json:"label"`
+	Kind    string       `json:"kind"`
+	Status  HealthStatus `json:"status"`
+	Metrics *NodeMetrics `json:"metrics,omitempty"`
+}
+
+// NodeMetrics holds the P0 metrics rendered per pipeline node.
+type NodeMetrics struct {
+	EventsInPerSec  float64 `json:"events_in_per_sec,omitempty"`
+	EventsOutPerSec float64 `json:"events_out_per_sec,omitempty"`
+	ErrorCount      float64 `json:"error_count,omitempty"`
+	DropCount       float64 `json:"drop_count,omitempty"`
 }
 
 // Edge is a directional connection between nodes.
