@@ -1,0 +1,12 @@
+services:
+  elastic-agent:
+    image: alpine:3.21
+    command: ["sh", "-c", "while true; do nc -lk -p 6791 -e echo ok; done"]
+
+  otelcol:
+    image: alpine:3.21
+    command: ["sh", "-c", "while true; do nc -lk -p 13133 -e echo ok; done"]
+
+  edot-collector:
+    image: alpine:3.21
+    command: ["sh", "-c", "while true; do nc -lk -p 55679 -e echo ok; done"]
