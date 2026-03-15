@@ -2,9 +2,21 @@ outputs:
   default:
     type: elasticsearch
     hosts: ["http://localhost:9200"]
+  monitoring:
+    type: elasticsearch
+    hosts: ["http://localhost:9201"]
 
 inputs:
   - id: system-logs
     type: filestream
     enabled: true
     use_output: default
+    streams:
+      - id: syslog
+        paths: ["/var/log/syslog"]
+  - id: api-events
+    type: httpjson
+    enabled: false
+    use_output: monitoring
+    streams:
+      - id: events

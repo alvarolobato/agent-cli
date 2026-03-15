@@ -1,21 +1,39 @@
 package dashboard
 
-import "strings"
+import (
+	"fmt"
+	"strings"
 
-// Model is a placeholder dashboard screen model.
+	"github.com/alvarolobato/agent-cli/internal/pipeline"
+	"github.com/charmbracelet/lipgloss"
+)
+
+var (
+	columnStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(0, 1).Width(34)
+	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
+	nodeStyle   = lipgloss.NewStyle().PaddingLeft(1)
+)
+
+// Model renders a pipeline-first dashboard screen.
 type Model struct {
 	cursor int
 	items  []string
+	pipe   *pipeline.Pipeline
 }
 
 // NewModel returns the initial dashboard state.
-func NewModel() Model {
+func NewModel(p *pipeline.Pipeline) Model {
+	items := []string{
+		"Inputs",
+		"Processors",
+		"Outputs",
+	}
+	if p == nil {
+		p = pipeline.ExamplePipeline()
+	}
 	return Model{
-		items: []string{
-			"Overview",
-			"Pipelines",
-			"Issues",
-		},
+		items: items,
+		pipe:  p,
 	}
 }
 
@@ -40,14 +58,62 @@ func (m *Model) MoveDown() {
 }
 
 func (m Model) View() string {
-	var b strings.Builder
-	b.WriteString("Dashboard\n")
-	for i, item := range m.items {
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
-		b.WriteString(prefix + item + "\n")
+	inputs := renderColumn(m.items[0], m.nodesByKind("input"), m.cursor == 0)
+	processors := renderColumn(m.items[1], m.nodesByKind("processor"), m.cursor == 1)
+	outputs := renderColumn(m.items[2], m.nodesByKind("output"), m.cursor == 2)
+	return lipgloss.JoinHorizontal(lipgloss.Top, inputs, processors, outputs)
+}
+
+func (m Model) nodesByKind(kind string) []pipeline.Node {
+	if m.pipe == nil {
+		return nil
 	}
-	return strings.TrimRight(b.String(), "\n")
+	nodes := make([]pipeline.Node, 0, len(m.pipe.Nodes))
+	for _, n := range m.pipe.Nodes {
+		if n.Kind == kind {
+			nodes = append(nodes, n)
+		}
+	}
+	return nodes
+}
+
+func renderColumn(title string, nodes []pipeline.Node, selected bool) string {
+	var b strings.Builder
+	if selected {
+		b.WriteString(titleStyle.Underline(true).Render(title))
+	} else {
+		b.WriteString(titleStyle.Render(title))
+	}
+	b.WriteString("\n")
+
+	if len(nodes) == 0 {
+		b.WriteString(nodeStyle.Render("-"))
+		return columnStyle.Render(strings.TrimRight(b.String(), "\n"))
+	}
+
+	for _, n := range nodes {
+		events := "-"
+		if n.Metrics != nil {
+			events = fmt.Sprintf("%.2f/s", n.Metrics.EventsOutPerSec)
+		}
+		b.WriteString(nodeStyle.Render(fmt.Sprintf("%s %s (%s)", healthIcon(n.Status), n.Label, events)))
+		b.WriteString("\n")
+	}
+
+	return columnStyle.Render(strings.TrimRight(b.String(), "\n"))
+}
+
+func healthIcon(status pipeline.HealthStatus) string {
+	switch status {
+	case pipeline.Healthy:
+		return "✓"
+	case pipeline.Degraded:
+		return "⚠"
+	case pipeline.Error:
+		return "✗"
+	case pipeline.Disabled:
+		return "○"
+	default:
+		return "?"
+	}
 }

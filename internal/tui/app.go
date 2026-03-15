@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alvarolobato/agent-cli/internal/pipeline"
 	"github.com/alvarolobato/agent-cli/internal/tui/dashboard"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -25,10 +26,10 @@ type Model struct {
 }
 
 // NewModel builds the TUI root model.
-func NewModel(live bool, refresh time.Duration) Model {
+func NewModel(live bool, refresh time.Duration, pipe *pipeline.Pipeline) Model {
 	return Model{
 		screen:  screenDashboard,
-		dash:    dashboard.NewModel(),
+		dash:    dashboard.NewModel(pipe),
 		live:    live,
 		refresh: refresh,
 	}

@@ -1,9 +1,14 @@
 services:
   elastic-agent:
-    image: python:3.13-alpine
-    command: ["python", "-m", "http.server", "6791", "--bind", "0.0.0.0"]
+    image: elastic/elastic-agent:9.0.0
+    user: root
+    command: ["elastic-agent", "run", "-e", "-c", "/usr/share/elastic-agent/elastic-agent.yml"]
+    volumes:
+      - ./elastic-agent.yml:/usr/share/elastic-agent/elastic-agent.yml:ro
+      - elastic-agent-state:/usr/share/elastic-agent/state
     ports:
       - "6791:6791"
+      - "5066:5066"
 
   otelcol:
     image: python:3.13-alpine
@@ -16,3 +21,6 @@ services:
     command: ["python", "-m", "http.server", "55679", "--bind", "0.0.0.0"]
     ports:
       - "55679:55679"
+
+volumes:
+  elastic-agent-state:
