@@ -23,14 +23,10 @@ type Model struct {
 
 // NewModel returns the initial dashboard state.
 func NewModel(p *pipeline.Pipeline) Model {
-	items := []string{
-		"Inputs",
-		"Processors",
-		"Outputs",
-	}
 	if p == nil {
 		p = pipeline.ExamplePipeline()
 	}
+	items := columnTitles(p)
 	return Model{
 		items: items,
 		pipe:  p,
@@ -58,10 +54,14 @@ func (m *Model) MoveDown() {
 }
 
 func (m Model) View() string {
-	inputs := renderColumn(m.items[0], m.nodesByKind("input"), m.cursor == 0)
+	leftKind, rightKind := "input", "output"
+	if m.usesOTelKinds() {
+		leftKind, rightKind = "receiver", "exporter"
+	}
+	left := renderColumn(m.items[0], m.nodesByKind(leftKind), m.cursor == 0)
 	processors := renderColumn(m.items[1], m.nodesByKind("processor"), m.cursor == 1)
-	outputs := renderColumn(m.items[2], m.nodesByKind("output"), m.cursor == 2)
-	return lipgloss.JoinHorizontal(lipgloss.Top, inputs, processors, outputs)
+	right := renderColumn(m.items[2], m.nodesByKind(rightKind), m.cursor == 2)
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, processors, right)
 }
 
 func (m Model) nodesByKind(kind string) []pipeline.Node {
@@ -116,4 +116,38 @@ func healthIcon(status pipeline.HealthStatus) string {
 	default:
 		return "?"
 	}
+}
+
+func (m Model) usesOTelKinds() bool {
+	if m.pipe == nil {
+		return false
+	}
+	hasReceiver := false
+	hasExporter := false
+	for _, node := range m.pipe.Nodes {
+		if node.Kind == "receiver" {
+			hasReceiver = true
+		}
+		if node.Kind == "exporter" {
+			hasExporter = true
+		}
+	}
+	return hasReceiver || hasExporter
+}
+
+func columnTitles(p *pipeline.Pipeline) []string {
+	hasReceiver := false
+	hasExporter := false
+	for _, node := range p.Nodes {
+		if node.Kind == "receiver" {
+			hasReceiver = true
+		}
+		if node.Kind == "exporter" {
+			hasExporter = true
+		}
+	}
+	if hasReceiver || hasExporter {
+		return []string{"Receivers", "Processors", "Exporters"}
+	}
+	return []string{"Inputs", "Processors", "Outputs"}
 }

@@ -26,3 +26,22 @@ func TestModelViewRendersPipelineColumns(t *testing.T) {
 		}
 	}
 }
+
+func TestModelViewRendersOTelColumns(t *testing.T) {
+	model := NewModel(&pipeline.Pipeline{
+		Name: "edot",
+		Nodes: []pipeline.Node{
+			{ID: "receiver.otlp", Label: "otlp", Kind: "receiver", Status: pipeline.Healthy},
+			{ID: "processor.batch", Label: "batch", Kind: "processor", Status: pipeline.Healthy},
+			{ID: "exporter.debug", Label: "debug", Kind: "exporter", Status: pipeline.Healthy},
+		},
+		UpdatedAt: time.Now().UTC(),
+	})
+
+	view := model.View()
+	for _, token := range []string{"Receivers", "Processors", "Exporters", "otlp", "batch", "debug"} {
+		if !strings.Contains(view, token) {
+			t.Fatalf("expected %q in dashboard view, got:\n%s", token, view)
+		}
+	}
+}

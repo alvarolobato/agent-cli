@@ -10,17 +10,15 @@ services:
       - "6791:6791"
       - "5066:5066"
 
-  otelcol:
-    image: python:3.13-alpine
-    command: ["python", "-m", "http.server", "13133", "--bind", "0.0.0.0"]
-    ports:
-      - "13133:13133"
-
   edot-collector:
-    image: python:3.13-alpine
-    command: ["python", "-m", "http.server", "55679", "--bind", "0.0.0.0"]
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./edot-collector.yml:/etc/otelcol-contrib/config.yaml:ro
     ports:
       - "55679:55679"
+      - "13133:13133"
+      - "8888:8888"
 
 volumes:
   elastic-agent-state:

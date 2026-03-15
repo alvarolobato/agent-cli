@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/alvarolobato/agent-cli/internal/agent/edot"
 	"github.com/alvarolobato/agent-cli/internal/agent/elasticagent"
 	"github.com/alvarolobato/agent-cli/internal/config"
+	"github.com/alvarolobato/agent-cli/internal/metrics"
 	"github.com/alvarolobato/agent-cli/internal/output"
 	"github.com/alvarolobato/agent-cli/internal/pipeline"
 	"github.com/spf13/cobra"
@@ -21,12 +24,24 @@ func newStatusCommand() *cobra.Command {
 	var format string
 	var elasticConfigPath string
 	var elasticStatusURL string
+	var edotConfigPath string
+	var edotZPagesURL string
+	var edotMetricsURL string
+	var edotHealthURL string
 
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show a pipeline-oriented status report",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			model, err := statusPipeline(cmd, agentType, elasticConfigPath, elasticStatusURL)
+			model, err := statusPipeline(cmd, statusOptions{
+				agentType:        agentType,
+				elasticConfig:    elasticConfigPath,
+				elasticStatusURL: elasticStatusURL,
+				edotConfig:       edotConfigPath,
+				edotZPagesURL:    edotZPagesURL,
+				edotMetricsURL:   edotMetricsURL,
+				edotHealthURL:    edotHealthURL,
+			})
 			if err != nil {
 				return err
 			}
@@ -52,36 +67,69 @@ func newStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "table", fmt.Sprintf("Output format (%s)", "table|json"))
 	cmd.Flags().StringVar(&elasticConfigPath, "elastic-config", "", "Path to elastic-agent.yml (auto-detected when omitted)")
 	cmd.Flags().StringVar(&elasticStatusURL, "elastic-url", "http://localhost:6791", "Elastic Agent status API base URL")
+	cmd.Flags().StringVar(&edotConfigPath, "edot-config", "", "Path to EDOT/OTel collector YAML config")
+	cmd.Flags().StringVar(&edotZPagesURL, "edot-zpages-url", "http://localhost:55679", "EDOT zpages base URL")
+	cmd.Flags().StringVar(&edotMetricsURL, "edot-metrics-url", "http://localhost:8888/metrics", "EDOT Prometheus metrics endpoint")
+	cmd.Flags().StringVar(&edotHealthURL, "edot-health-url", "http://localhost:13133/", "EDOT health_check endpoint")
 
 	return cmd
 }
 
-func statusPipeline(cmd *cobra.Command, agentType, elasticConfigPath, elasticStatusURL string) (*pipeline.Pipeline, error) {
-	if agentType == "" {
+type statusOptions struct {
+	agentType        string
+	elasticConfig    string
+	elasticStatusURL string
+	edotConfig       string
+	edotZPagesURL    string
+	edotMetricsURL   string
+	edotHealthURL    string
+}
+
+func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeline, error) {
+	if options.agentType == "" {
 		return pipeline.ExamplePipeline(), nil
 	}
-	if agentType != "elastic-agent" {
-		return nil, fmt.Errorf("unsupported --agent value %q", agentType)
-	}
-
-	configPath, err := resolveElasticConfigPath(elasticConfigPath)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg, err := config.ParseElasticAgentConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	httpClient := &http.Client{Timeout: 5 * time.Second}
-	client := elasticagent.NewClient(elasticStatusURL, httpClient)
-	adapter := elasticagent.NewAdapter(cfg, client)
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return adapter.Status(ctx)
+
+	switch options.agentType {
+	case "elastic-agent":
+		configPath, err := resolveElasticConfigPath(options.elasticConfig)
+		if err != nil {
+			return nil, err
+		}
+		cfg, err := config.ParseElasticAgentConfig(configPath)
+		if err != nil {
+			return nil, err
+		}
+
+		httpClient := &http.Client{Timeout: 5 * time.Second}
+		client := elasticagent.NewClient(options.elasticStatusURL, httpClient)
+		adapter := elasticagent.NewAdapter(cfg, client)
+		return adapter.Status(ctx)
+	case "edot":
+		if strings.TrimSpace(options.edotConfig) == "" {
+			return nil, errors.New("edot config not found; pass --edot-config")
+		}
+
+		cfg, err := config.ParseOTelCollectorConfig(options.edotConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		httpClient := &http.Client{Timeout: 5 * time.Second}
+		zpagesClient := edot.NewZPagesClient(options.edotZPagesURL, httpClient)
+		metricsCollector := metrics.NewCollector(httpClient)
+		adapter := edot.NewAdapterWithOptions(cfg, zpagesClient, metricsCollector, edot.AdapterOptions{
+			PrometheusURL:  options.edotMetricsURL,
+			HealthCheckURL: options.edotHealthURL,
+		})
+		return adapter.Status(ctx)
+	default:
+		return nil, fmt.Errorf("unsupported --agent value %q", options.agentType)
+	}
 }
 
 func resolveElasticConfigPath(explicitPath string) (string, error) {

@@ -66,7 +66,9 @@ func (c *Collector) CollectBeatStats(ctx context.Context, endpoint string) (*Sna
 	if err != nil {
 		return nil, fmt.Errorf("request beat stats: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("beat stats endpoint returned %s", resp.Status)

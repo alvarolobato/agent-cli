@@ -19,7 +19,7 @@ func TestServicesReachable(t *testing.T) {
 
 	targets := []string{
 		"127.0.0.1:6791",  // elastic-agent
-		"127.0.0.1:13133", // otelcol health
+		"127.0.0.1:13133", // edot health_check
 		"127.0.0.1:55679", // edot zpages
 	}
 
