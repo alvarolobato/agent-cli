@@ -80,6 +80,7 @@ func (a *Adapter) Status(ctx context.Context) (*pipeline.Pipeline, error) {
 	nodes := make([]pipeline.Node, 0, len(a.cfg.Inputs)+len(a.cfg.Outputs))
 	edges := make([]pipeline.Edge, 0, len(a.cfg.Inputs))
 	metricsByEndpoint := map[string]*pipeline.NodeMetrics{}
+	missingOutputRefs := make([]string, 0)
 
 	outputNodeIDs := make(map[string]string, len(a.cfg.Outputs))
 	outputNames := make([]string, 0, len(a.cfg.Outputs))
@@ -120,7 +121,22 @@ func (a *Adapter) Status(ctx context.Context) (*pipeline.Pipeline, error) {
 				From: nodeID,
 				To:   outputNodeID,
 			})
+			continue
 		}
+
+		if ref := strings.TrimSpace(in.UseOutput); ref != "" {
+			missingOutputRefs = append(missingOutputRefs, fmt.Sprintf("%s->%s", in.ID, ref))
+		}
+	}
+
+	metadata := map[string]string{
+		"agent_id":       runtime.ID,
+		"agent_type":     agentType,
+		"runtime_status": strings.ToLower(runtime.Status.Overall),
+	}
+	if len(missingOutputRefs) > 0 {
+		sort.Strings(missingOutputRefs)
+		metadata["config_warnings"] = "missing output mappings: " + strings.Join(missingOutputRefs, ",")
 	}
 
 	return &pipeline.Pipeline{
@@ -128,11 +144,7 @@ func (a *Adapter) Status(ctx context.Context) (*pipeline.Pipeline, error) {
 		Nodes:     nodes,
 		Edges:     edges,
 		UpdatedAt: time.Now().UTC(),
-		Metadata: map[string]string{
-			"agent_id":       runtime.ID,
-			"agent_type":     agentType,
-			"runtime_status": strings.ToLower(runtime.Status.Overall),
-		},
+		Metadata:  metadata,
 	}, nil
 }
 
@@ -245,7 +257,7 @@ func mapRuntimeStatus(overall string) pipeline.HealthStatus {
 	switch strings.ToUpper(strings.TrimSpace(overall)) {
 	case "HEALTHY", "RUNNING", "OK":
 		return pipeline.Healthy
-	case "DEGRADED", "WARNING":
+	case "DEGRADED", "WARNING", "WARN":
 		return pipeline.Degraded
 	case "FAILED", "ERROR":
 		return pipeline.Error

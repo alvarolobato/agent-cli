@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/alvarolobato/agent-cli/internal/config"
@@ -109,6 +110,31 @@ func TestAdapterHealthUsesRuntimeOverall(t *testing.T) {
 	}
 }
 
+func TestAdapterHealthMapsWarnToDegraded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"ea-1",
+			"name":"standalone-agent",
+			"status":{"overall":"WARN","message":"warn"},
+			"components":[]
+		}`))
+	}))
+	defer server.Close()
+
+	cfg := &config.ElasticAgentConfig{}
+	client := NewClient(server.URL, server.Client())
+	adapter := NewAdapter(cfg, client)
+
+	health, err := adapter.Health(context.Background())
+	if err != nil {
+		t.Fatalf("Health() error = %v", err)
+	}
+	if health != pipeline.Degraded {
+		t.Fatalf("expected health degraded for WARN, got %q", health)
+	}
+}
+
 type fakeMetricsCollector struct {
 	snapshot *metrics.Snapshot
 }
@@ -181,5 +207,47 @@ func TestAdapterStatusPopulatesInputMetrics(t *testing.T) {
 	disabledInput := nodesByID["input.api-events"]
 	if disabledInput.Metrics != nil {
 		t.Fatalf("expected disabled input metrics to be nil")
+	}
+}
+
+func TestAdapterStatusAddsWarningWhenInputOutputMappingIsMissing(t *testing.T) {
+	cfg := &config.ElasticAgentConfig{
+		Outputs: map[string]config.ElasticOutput{
+			"default": {Type: "elasticsearch"},
+		},
+		Inputs: []config.ElasticInput{
+			{
+				ID:        "system-logs",
+				Type:      "filestream",
+				Enabled:   true,
+				UseOutput: "missing-output",
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"ea-1",
+			"name":"standalone-agent",
+			"status":{"overall":"HEALTHY","message":"ok"},
+			"components":[]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewAdapter(cfg, NewClient(server.URL, server.Client()))
+	got, err := adapter.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+
+	if len(got.Edges) != 0 {
+		t.Fatalf("expected no edges with missing output mapping, got %d", len(got.Edges))
+	}
+
+	warnings := got.Metadata["config_warnings"]
+	if !strings.Contains(warnings, "system-logs->missing-output") {
+		t.Fatalf("expected config_warnings to mention missing mapping, got %q", warnings)
 	}
 }

@@ -114,8 +114,6 @@ func (c *Collector) updateAndComputeRates(endpoint string, current snapshotCount
 	return snapshotCounters{
 		eventsIn:  positiveDeltaPerSecond(current.eventsIn, previous.counters.eventsIn, seconds),
 		eventsOut: positiveDeltaPerSecond(current.eventsOut, previous.counters.eventsOut, seconds),
-		errors:    positiveDeltaPerSecond(current.errors, previous.counters.errors, seconds),
-		drops:     positiveDeltaPerSecond(current.drops, previous.counters.drops, seconds),
 	}, true
 }
 
