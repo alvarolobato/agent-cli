@@ -1,0 +1,18 @@
+services:
+  elastic-agent:
+    image: python:3.13-alpine
+    command: ["python", "-m", "http.server", "6791", "--bind", "0.0.0.0"]
+    ports:
+      - "6791:6791"
+
+  otelcol:
+    image: python:3.13-alpine
+    command: ["python", "-m", "http.server", "13133", "--bind", "0.0.0.0"]
+    ports:
+      - "13133:13133"
+
+  edot-collector:
+    image: python:3.13-alpine
+    command: ["python", "-m", "http.server", "55679", "--bind", "0.0.0.0"]
+    ports:
+      - "55679:55679"

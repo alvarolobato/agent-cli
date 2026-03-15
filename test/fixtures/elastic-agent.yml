@@ -1,0 +1,10 @@
+outputs:
+  default:
+    type: elasticsearch
+    hosts: ["http://localhost:9200"]
+
+inputs:
+  - id: system-logs
+    type: filestream
+    enabled: true
+    use_output: default
