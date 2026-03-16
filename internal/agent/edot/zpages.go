@@ -193,13 +193,9 @@ func normalizeComponents(defaultKind string, components []ComponentStatus) []Com
 }
 
 func parsePipelinezHTML(html string) ([]PipelineStatus, error) {
-	// HTML fallback only supports a deterministic mock shape using data attributes.
-	// Real OTel pipelinez output is handled through the JSON path above.
-	//
-	// <tr data-pipeline="traces" data-kind="receiver" data-component="otlp" data-status="StatusOK" data-error=""></tr>
-	//
-	// If an environment returns plain pipelinez HTML without these attributes,
-	// callers should switch to JSON responses for robust parsing.
+	// HTML fallback supports two shapes:
+	// 1) deterministic mock rows with data-* attributes (includes status/error)
+	// 2) collector pipeline links (component IDs only; no runtime status/error fields)
 	rowRe := regexp.MustCompile(`(?is)<tr[^>]*data-pipeline="([^"]+)"[^>]*data-kind="([^"]+)"[^>]*data-component="([^"]+)"[^>]*data-status="([^"]*)"[^>]*data-error="([^"]*)"[^>]*>`)
 	matches := rowRe.FindAllStringSubmatch(html, -1)
 	if len(matches) == 0 {

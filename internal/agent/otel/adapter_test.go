@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/alvarolobato/agent-cli/internal/config"
@@ -101,5 +103,62 @@ func TestAdapterHealthUsesHealthCheckEndpoint(t *testing.T) {
 	}
 	if health != pipeline.Healthy {
 		t.Fatalf("expected health healthy, got %q", health)
+	}
+}
+
+func TestAdapterHealthNormalizesBindAllEndpointToLocalhost(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"Server available"}`))
+	}))
+	defer server.Close()
+
+	parsed, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("url.Parse(server.URL) error = %v", err)
+	}
+
+	cfg, err := config.ParseOTelCollectorConfig("../../../test/fixtures/otel-config.yaml")
+	if err != nil {
+		t.Fatalf("ParseOTelCollectorConfig() error = %v", err)
+	}
+	cfg.Extensions = map[string]config.OTelComponent{
+		"health_check": {
+			Name: "health_check",
+			Type: "health_check",
+			Raw: map[string]interface{}{
+				"endpoint": "0.0.0.0:" + parsed.Port(),
+			},
+		},
+	}
+
+	adapter := NewAdapterWithOptions(cfg, &fakeZPages{}, &fakeOTelMetrics{}, AdapterOptions{
+		HTTPClient: server.Client(),
+	})
+	health, err := adapter.Health(context.Background())
+	if err != nil {
+		t.Fatalf("Health() error = %v", err)
+	}
+	if health != pipeline.Healthy {
+		t.Fatalf("expected health healthy, got %q", health)
+	}
+}
+
+func TestHealthURLFallsBackOnInvalidEndpoint(t *testing.T) {
+	cfg := &config.OTelCollectorConfig{
+		Extensions: map[string]config.OTelComponent{
+			"health_check": {
+				Name: "health_check",
+				Type: "health_check",
+				Raw: map[string]interface{}{
+					"endpoint": "://bad-url",
+				},
+			},
+		},
+	}
+	const fallback = "http://localhost:13133/"
+	got := healthURL(cfg, fallback)
+	if strings.TrimSpace(got) != fallback {
+		t.Fatalf("expected fallback %q, got %q", fallback, got)
 	}
 }

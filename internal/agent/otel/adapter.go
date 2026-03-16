@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -443,8 +445,58 @@ func healthURL(cfg *config.OTelCollectorConfig, fallback string) string {
 	if value == "" {
 		return fallback
 	}
-	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-		return strings.TrimRight(value, "/") + "/"
+	normalized, ok := normalizeHealthEndpoint(value)
+	if !ok {
+		return fallback
 	}
-	return "http://" + strings.TrimRight(value, "/") + "/"
+	return normalized
+}
+
+func normalizeHealthEndpoint(rawEndpoint string) (string, bool) {
+	candidate := strings.TrimSpace(rawEndpoint)
+	if candidate == "" {
+		return "", false
+	}
+	if !strings.HasPrefix(candidate, "http://") && !strings.HasPrefix(candidate, "https://") {
+		candidate = "http://" + candidate
+	}
+
+	parsed, err := url.Parse(candidate)
+	if err != nil {
+		return "", false
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return "", false
+	}
+
+	host := strings.TrimSpace(parsed.Hostname())
+	port := strings.TrimSpace(parsed.Port())
+	if host == "" && port == "" {
+		return "", false
+	}
+	if isBindAllHost(host) {
+		host = "localhost"
+	}
+	if host == "" {
+		return "", false
+	}
+	if port != "" {
+		parsed.Host = net.JoinHostPort(host, port)
+	} else {
+		parsed.Host = host
+	}
+
+	if parsed.Path == "" {
+		parsed.Path = "/"
+	}
+	return parsed.String(), true
+}
+
+func isBindAllHost(host string) bool {
+	switch strings.TrimSpace(strings.ToLower(host)) {
+	case "", "0.0.0.0", "::":
+		return true
+	default:
+		return false
+	}
 }

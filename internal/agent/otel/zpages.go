@@ -193,7 +193,9 @@ func normalizeComponents(defaultKind string, components []ComponentStatus) []Com
 }
 
 func parsePipelinezHTML(html string) ([]PipelineStatus, error) {
-	// HTML fallback only supports a deterministic mock shape using data attributes.
+	// HTML fallback supports two shapes:
+	// 1) deterministic mock rows with data-* attributes (includes status/error)
+	// 2) collector pipeline links (component IDs only; no runtime status/error fields)
 	rowRe := regexp.MustCompile(`(?is)<tr[^>]*data-pipeline="([^"]+)"[^>]*data-kind="([^"]+)"[^>]*data-component="([^"]+)"[^>]*data-status="([^"]*)"[^>]*data-error="([^"]*)"[^>]*>`)
 	matches := rowRe.FindAllStringSubmatch(html, -1)
 	if len(matches) == 0 {

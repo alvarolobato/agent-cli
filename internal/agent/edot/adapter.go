@@ -2,6 +2,7 @@ package edot
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -134,7 +135,7 @@ func newZPagesBridge(zpages zpagesAPI) *zpagesBridge {
 
 func (b *zpagesBridge) GetPipelineTopology(ctx context.Context) (*otel.PipelineTopology, error) {
 	if b == nil || b.zpages == nil {
-		return nil, nil
+		return nil, fmt.Errorf("zpages client is required")
 	}
 	topology, err := b.zpages.GetPipelineTopology(ctx)
 	if err != nil {
