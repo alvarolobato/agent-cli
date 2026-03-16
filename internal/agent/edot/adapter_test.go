@@ -200,3 +200,26 @@ func TestAdapterStatusPreservesProcessorOrderFromConfig(t *testing.T) {
 		t.Fatalf("expected batch -> exporter edge, got %#v", got.Edges)
 	}
 }
+
+func TestAdapterStatusFailsWhenZPagesClientMissing(t *testing.T) {
+	cfg := &config.OTelCollectorConfig{
+		Service: config.OTelServiceConfig{
+			Pipelines: map[string]config.OTelPipelineConfig{
+				"logs": {
+					Receivers:  []string{"otlp"},
+					Processors: []string{"batch"},
+					Exporters:  []string{"debug"},
+				},
+			},
+		},
+	}
+
+	adapter := newAdapterWithDeps(cfg, nil, nil, nil, "", "")
+	_, err := adapter.Status(context.Background())
+	if err == nil {
+		t.Fatal("expected Status() to fail when zpages client is missing")
+	}
+	if !strings.Contains(err.Error(), "zpages client is required") {
+		t.Fatalf("expected missing zpages error, got %v", err)
+	}
+}

@@ -20,5 +20,15 @@ services:
       - "13133:13133"
       - "8888:8888"
 
+  otelcol-contrib:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "55680:55679"
+      - "13134:13133"
+      - "8889:8888"
+
 volumes:
   elastic-agent-state:

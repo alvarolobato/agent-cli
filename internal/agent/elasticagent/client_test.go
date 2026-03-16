@@ -95,4 +95,3 @@ func TestClientGetStatusFallsBackToStatsEndpoint(t *testing.T) {
 		t.Fatalf("expected fallback health HEALTHY, got %q", status.Status.Overall)
 	}
 }
-

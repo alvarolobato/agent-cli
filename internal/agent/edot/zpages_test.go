@@ -117,9 +117,25 @@ func TestZPagesClientGetPipelineTopologyHTML(t *testing.T) {
 func TestParsePipelinezHTMLUnsupportedShapeError(t *testing.T) {
 	_, err := parsePipelinezHTML(`<html><body><table><tr><td>plain-html-without-data-attrs</td></tr></table></body></html>`)
 	if err == nil {
-		t.Fatalf("expected parsePipelinezHTML to fail without fallback data attributes")
+		t.Fatalf("expected parsePipelinezHTML to fail when no pipeline links are present")
 	}
-	if !strings.Contains(err.Error(), "supported fallback expects") {
-		t.Fatalf("expected explicit fallback limitation in error, got %q", err.Error())
+	if !strings.Contains(err.Error(), "no pipeline rows found in html") {
+		t.Fatalf("expected explicit no-pipeline error, got %q", err.Error())
+	}
+}
+
+func TestParsePipelinezCollectorHTMLParsesEscapedLinks(t *testing.T) {
+	pipelines, err := parsePipelinezCollectorHTML(`<html><body><a href="/debug/pipelinez?zpipelinename=logs&amp;zcomponentname=otlp&amp;zcomponentkind=receiver">receiver</a></body></html>`)
+	if err != nil {
+		t.Fatalf("parsePipelinezCollectorHTML() error = %v", err)
+	}
+	if len(pipelines) != 1 {
+		t.Fatalf("expected 1 pipeline, got %d", len(pipelines))
+	}
+	if pipelines[0].Name != "logs" {
+		t.Fatalf("expected logs pipeline, got %q", pipelines[0].Name)
+	}
+	if len(pipelines[0].Receivers) != 1 || pipelines[0].Receivers[0].ID != "otlp" {
+		t.Fatalf("expected receiver otlp, got %#v", pipelines[0].Receivers)
 	}
 }

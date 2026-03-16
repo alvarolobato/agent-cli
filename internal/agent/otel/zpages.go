@@ -1,4 +1,4 @@
-package edot
+package otel
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 const defaultZPagesURL = "http://localhost:55679"
 
-// ZPagesClient reads EDOT/OTel zpages endpoints.
+// ZPagesClient reads OTel zpages endpoints.
 type ZPagesClient struct {
 	baseURL    string
 	httpClient *http.Client
@@ -282,8 +282,8 @@ func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
 		exporters  []ComponentStatus
 		seen       map[string]bool
 	}
-	byPipeline := map[string]*pipelineParts{}
 
+	byPipeline := map[string]*pipelineParts{}
 	for _, match := range matches {
 		pipelineName, _ := url.QueryUnescape(strings.TrimSpace(match[1]))
 		componentName, _ := url.QueryUnescape(strings.TrimSpace(match[2]))
@@ -298,16 +298,16 @@ func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
 			parts = &pipelineParts{seen: map[string]bool{}}
 			byPipeline[pipelineName] = parts
 		}
+		component := ComponentStatus{
+			ID:   componentName,
+			Kind: kind,
+		}
 		componentKey := kind + "|" + componentName
 		if parts.seen[componentKey] {
 			continue
 		}
 		parts.seen[componentKey] = true
 
-		component := ComponentStatus{
-			ID:   componentName,
-			Kind: kind,
-		}
 		switch kind {
 		case "receiver":
 			parts.receivers = append(parts.receivers, component)
@@ -334,6 +334,5 @@ func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
 			Exporters:  parts.exporters,
 		})
 	}
-
 	return out, nil
 }
