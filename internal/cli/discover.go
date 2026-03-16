@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/alvarolobato/agent-cli/internal/discovery"
@@ -24,7 +25,11 @@ func newDiscoverCommand() *cobra.Command {
 				if strings.TrimSpace(configPath) == "" {
 					configPath = "(config not found)"
 				}
-				cmd.Printf("  %d. %s (PID %d) - %s [%s]\n", i+1, a.AgentType, a.PID, configPath, a.Source)
+				pidLabel := "PID n/a"
+				if a.PID > 0 {
+					pidLabel = "PID " + strconv.Itoa(a.PID)
+				}
+				cmd.Printf("  %d. %s (%s) - %s [%s]\n", i+1, a.AgentType, pidLabel, configPath, a.Source)
 				if len(a.Children) == 0 {
 					continue
 				}

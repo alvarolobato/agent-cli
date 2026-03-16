@@ -15,6 +15,7 @@ func TestProcessScannerRecognizesEA93Tree(t *testing.T) {
 			{PID: 100, Name: "elastic-agent"},
 			{
 				PID:  200,
+				PPID: 100,
 				Name: "elastic-otel-collector",
 				Args: []string{"--supervised", "--config", "/etc/edot/config.yaml"},
 			},
@@ -44,9 +45,9 @@ func TestProcessScannerRecognizesEA92Tree(t *testing.T) {
 	provider := func(context.Context) ([]ProcessInfo, error) {
 		return []ProcessInfo{
 			{PID: 714, Name: "elastic-agent"},
-			{PID: 1091, Name: "elastic-agent", Args: []string{"otel", "--supervised"}},
-			{PID: 1443, Name: "agentbeat", Args: []string{"metricbeat", "-E", "path.data=/opt/run/metrics-default"}},
-			{PID: 1722, Name: "agentbeat", Args: []string{"filebeat", "-E", "path.data=/opt/run/log-default"}},
+			{PID: 1091, PPID: 714, Name: "elastic-agent", Args: []string{"otel", "--supervised"}},
+			{PID: 1443, PPID: 714, Name: "agentbeat", Args: []string{"metricbeat", "-E", "path.data=/opt/run/metrics-default"}},
+			{PID: 1722, PPID: 714, Name: "agentbeat", Args: []string{"filebeat", "-E", "path.data=/opt/run/log-default"}},
 		}, nil
 	}
 	strategy := NewProcessScannerWithProvider(provider)
@@ -78,6 +79,9 @@ func TestProcessScannerStandaloneEDOT(t *testing.T) {
 	}
 	if agents[0].ConfigPath != "/etc/edot/config.yaml" {
 		t.Fatalf("expected config path extracted, got %q", agents[0].ConfigPath)
+	}
+	if len(agents[0].Children) != 0 {
+		t.Fatalf("expected standalone EDOT without children, got %+v", agents[0].Children)
 	}
 }
 
@@ -154,9 +158,12 @@ func TestParseProcessArgumentsExtractsConfigAndEndpoints(t *testing.T) {
 }
 
 func TestParsePSLineUsesBasename(t *testing.T) {
-	proc, ok := parsePSLine("1091 /opt/Elastic/Agent/data/elastic-agent-9.2.4/elastic-agent otel --supervised")
+	proc, ok := parsePSLine("1091 714 /opt/Elastic/Agent/data/elastic-agent-9.2.4/elastic-agent otel --supervised")
 	if !ok {
 		t.Fatalf("parsePSLine() returned !ok")
+	}
+	if proc.PPID != 714 {
+		t.Fatalf("expected ppid 714, got %d", proc.PPID)
 	}
 	if proc.Name != "elastic-agent" {
 		t.Fatalf("expected basename elastic-agent, got %q", proc.Name)
@@ -224,6 +231,57 @@ func TestOrchestratorMergesAcrossStrategies(t *testing.T) {
 	}
 	if len(agents) == 0 {
 		t.Fatalf("expected merged agents")
+	}
+}
+
+func TestOrchestratorPrefersPathConfigOverProcessGuess(t *testing.T) {
+	o := &Orchestrator{
+		strategies: []Strategy{
+			staticStrategy{agents: []DiscoveredAgent{
+				{AgentType: "elastic-agent", ConfigPath: "/tmp/guess/elastic-agent.yml", Source: "process"},
+			}},
+			staticStrategy{agents: []DiscoveredAgent{
+				{AgentType: "elastic-agent", ConfigPath: "/opt/Elastic/Agent/elastic-agent.yml", Source: "path"},
+			}},
+		},
+	}
+	agents, err := o.DiscoverDetailed(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverDetailed() error = %v", err)
+	}
+	if len(agents) != 1 {
+		t.Fatalf("expected exactly one merged agent, got %d", len(agents))
+	}
+	if agents[0].ConfigPath != "/opt/Elastic/Agent/elastic-agent.yml" {
+		t.Fatalf("expected path strategy config to win, got %q", agents[0].ConfigPath)
+	}
+}
+
+func TestProcessScannerAttachesChildrenByPPIDWhenMultipleParents(t *testing.T) {
+	provider := func(context.Context) ([]ProcessInfo, error) {
+		return []ProcessInfo{
+			{PID: 100, Name: "elastic-agent"},
+			{PID: 200, Name: "elastic-agent"},
+			{PID: 201, PPID: 200, Name: "agentbeat", Args: []string{"metricbeat"}},
+		}, nil
+	}
+
+	strategy := NewProcessScannerWithProvider(provider)
+	agents, err := strategy.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	if len(agents) != 2 {
+		t.Fatalf("expected 2 parent agents, got %d", len(agents))
+	}
+
+	for _, a := range agents {
+		if a.PID == 200 && len(a.Children) != 1 {
+			t.Fatalf("expected child attached to PID 200 parent, got %+v", a.Children)
+		}
+		if a.PID == 100 && len(a.Children) != 0 {
+			t.Fatalf("expected no children on PID 100 parent, got %+v", a.Children)
+		}
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 // ProcessInfo describes a running process that might map to an agent.
 type ProcessInfo struct {
 	PID     int
+	PPID    int
 	Name    string
 	Command string
 	Args    []string
@@ -63,6 +64,7 @@ func (s *processScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error
 					Role: role,
 					Args: append([]string{}, proc.Args...),
 				},
+				parentPID:  proc.PPID,
 				agentType:  typ,
 				configPath: configPath,
 				endpoints:  endpoints,
@@ -85,28 +87,47 @@ func (s *processScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error
 	}
 
 	if len(parents) > 0 {
-		sortChildren(children)
-		for _, child := range children {
-			parents[0].Children = append(parents[0].Children, child.child)
+		parentsByPID := make(map[int]int, len(parents))
+		for i := range parents {
+			parentsByPID[parents[i].PID] = i
 		}
-		return append(parents, standalone...), nil
+
+		attached := make([]bool, len(children))
+		for i := range children {
+			if parentIdx, ok := parentsByPID[children[i].parentPID]; ok {
+				parents[parentIdx].Children = append(parents[parentIdx].Children, children[i].child)
+				attached[i] = true
+			}
+		}
+		if len(parents) == 1 {
+			for i := range children {
+				if attached[i] {
+					continue
+				}
+				parents[0].Children = append(parents[0].Children, children[i].child)
+				attached[i] = true
+			}
+		}
+
+		unmatched := make([]childCandidate, 0, len(children))
+		for i := range children {
+			if attached[i] {
+				continue
+			}
+			unmatched = append(unmatched, children[i])
+		}
+		for i := range parents {
+			sortDiscoveredChildren(parents[i].Children)
+		}
+		return append(append(parents, standalone...), childrenToStandalone(unmatched)...), nil
 	}
 	return append(standalone, childrenToStandalone(children)...), nil
 }
 
 func inferConfigPath(proc ProcessInfo, agentType string, current string) string {
-	if strings.TrimSpace(current) != "" {
-		return current
-	}
-	if strings.TrimSpace(proc.Command) == "" {
-		return ""
-	}
-	switch agentType {
-	case "elastic-agent":
-		return filepath.Join(filepath.Dir(proc.Command), "elastic-agent.yml")
-	default:
-		return ""
-	}
+	_ = proc
+	_ = agentType
+	return strings.TrimSpace(current)
 }
 
 func defaultProcessProvider(ctx context.Context) ([]ProcessInfo, error) {
@@ -114,7 +135,7 @@ func defaultProcessProvider(ctx context.Context) ([]ProcessInfo, error) {
 		return []ProcessInfo{}, nil
 	}
 
-	cmd := exec.CommandContext(ctx, "ps", "-eo", "pid,args")
+	cmd := exec.CommandContext(ctx, "ps", "-eo", "pid,ppid,args")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -137,17 +158,22 @@ func defaultProcessProvider(ctx context.Context) ([]ProcessInfo, error) {
 
 func parsePSLine(line string) (ProcessInfo, bool) {
 	fields := strings.Fields(line)
-	if len(fields) < 2 {
+	if len(fields) < 3 {
 		return ProcessInfo{}, false
 	}
 	pid, err := strconv.Atoi(fields[0])
 	if err != nil {
 		return ProcessInfo{}, false
 	}
-	command := fields[1]
-	args := append([]string{}, fields[2:]...)
+	ppid, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return ProcessInfo{}, false
+	}
+	command := fields[2]
+	args := append([]string{}, fields[3:]...)
 	return ProcessInfo{
 		PID:     pid,
+		PPID:    ppid,
 		Name:    filepath.Base(command),
 		Command: command,
 		Args:    args,
@@ -250,18 +276,19 @@ func parseEFlag(endpoints map[string]string, value string) {
 
 type childCandidate struct {
 	child      DiscoveredChild
+	parentPID  int
 	agentType  string
 	configPath string
 	endpoints  map[string]string
 }
 
-func sortChildren(children []childCandidate) {
+func sortDiscoveredChildren(children []DiscoveredChild) {
 	if len(children) < 2 {
 		return
 	}
 	for i := 0; i < len(children)-1; i++ {
 		for j := i + 1; j < len(children); j++ {
-			if children[j].child.PID < children[i].child.PID {
+			if children[j].PID < children[i].PID {
 				children[i], children[j] = children[j], children[i]
 			}
 		}
@@ -281,7 +308,6 @@ func childrenToStandalone(children []childCandidate) []DiscoveredAgent {
 			PID:        child.child.PID,
 			ConfigPath: child.configPath,
 			Endpoints:  child.endpoints,
-			Children:   []DiscoveredChild{child.child},
 			Source:     "process",
 		})
 	}

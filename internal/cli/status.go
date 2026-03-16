@@ -40,17 +40,24 @@ func newStatusCommand() *cobra.Command {
 		Short: "Show a pipeline-oriented status report",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			model, err := statusPipeline(cmd, statusOptions{
-				agentType:        agentType,
-				elasticConfig:    elasticConfigPath,
-				elasticStatusURL: elasticStatusURL,
-				edotConfig:       edotConfigPath,
-				edotZPagesURL:    edotZPagesURL,
-				edotMetricsURL:   edotMetricsURL,
-				edotHealthURL:    edotHealthURL,
-				otelConfig:       otelConfigPath,
-				otelZPagesURL:    otelZPagesURL,
-				otelMetricsURL:   otelMetricsURL,
-				otelHealthURL:    otelHealthURL,
+				agentType:         agentType,
+				elasticConfig:     elasticConfigPath,
+				elasticStatusURL:  elasticStatusURL,
+				elasticURLSet:     cmd.Flags().Changed("elastic-url"),
+				edotConfig:        edotConfigPath,
+				edotZPagesURL:     edotZPagesURL,
+				edotZPagesURLSet:  cmd.Flags().Changed("edot-zpages-url"),
+				edotMetricsURL:    edotMetricsURL,
+				edotMetricsURLSet: cmd.Flags().Changed("edot-metrics-url"),
+				edotHealthURL:     edotHealthURL,
+				edotHealthURLSet:  cmd.Flags().Changed("edot-health-url"),
+				otelConfig:        otelConfigPath,
+				otelZPagesURL:     otelZPagesURL,
+				otelZPagesURLSet:  cmd.Flags().Changed("otel-zpages-url"),
+				otelMetricsURL:    otelMetricsURL,
+				otelMetricsURLSet: cmd.Flags().Changed("otel-metrics-url"),
+				otelHealthURL:     otelHealthURL,
+				otelHealthURLSet:  cmd.Flags().Changed("otel-health-url"),
 			})
 			if err != nil {
 				return err
@@ -90,17 +97,24 @@ func newStatusCommand() *cobra.Command {
 }
 
 type statusOptions struct {
-	agentType        string
-	elasticConfig    string
-	elasticStatusURL string
-	edotConfig       string
-	edotZPagesURL    string
-	edotMetricsURL   string
-	edotHealthURL    string
-	otelConfig       string
-	otelZPagesURL    string
-	otelMetricsURL   string
-	otelHealthURL    string
+	agentType         string
+	elasticConfig     string
+	elasticStatusURL  string
+	elasticURLSet     bool
+	edotConfig        string
+	edotZPagesURL     string
+	edotZPagesURLSet  bool
+	edotMetricsURL    string
+	edotMetricsURLSet bool
+	edotHealthURL     string
+	edotHealthURLSet  bool
+	otelConfig        string
+	otelZPagesURL     string
+	otelZPagesURLSet  bool
+	otelMetricsURL    string
+	otelMetricsURLSet bool
+	otelHealthURL     string
+	otelHealthURLSet  bool
 }
 
 var discoverAgents = func(ctx context.Context) ([]discovery.DiscoveredAgent, error) {
@@ -193,33 +207,33 @@ func autoDetectStatusOptions(ctx context.Context, options statusOptions) (status
 		if strings.TrimSpace(options.elasticConfig) == "" {
 			options.elasticConfig = best.ConfigPath
 		}
-		if endpoint, ok := best.Endpoints["status"]; ok && strings.TrimSpace(options.elasticStatusURL) == "" {
+		if endpoint, ok := best.Endpoints["status"]; ok && !options.elasticURLSet {
 			options.elasticStatusURL = endpoint
 		}
 	case "edot":
 		if strings.TrimSpace(options.edotConfig) == "" {
 			options.edotConfig = best.ConfigPath
 		}
-		if endpoint, ok := best.Endpoints["zpages"]; ok {
+		if endpoint, ok := best.Endpoints["zpages"]; ok && !options.edotZPagesURLSet {
 			options.edotZPagesURL = endpoint
 		}
-		if endpoint, ok := best.Endpoints["metrics"]; ok {
+		if endpoint, ok := best.Endpoints["metrics"]; ok && !options.edotMetricsURLSet {
 			options.edotMetricsURL = endpoint + "/metrics"
 		}
-		if endpoint, ok := best.Endpoints["health"]; ok {
+		if endpoint, ok := best.Endpoints["health"]; ok && !options.edotHealthURLSet {
 			options.edotHealthURL = endpoint + "/"
 		}
 	case "otel":
 		if strings.TrimSpace(options.otelConfig) == "" {
 			options.otelConfig = best.ConfigPath
 		}
-		if endpoint, ok := best.Endpoints["zpages"]; ok {
+		if endpoint, ok := best.Endpoints["zpages"]; ok && !options.otelZPagesURLSet {
 			options.otelZPagesURL = endpoint
 		}
-		if endpoint, ok := best.Endpoints["metrics"]; ok {
+		if endpoint, ok := best.Endpoints["metrics"]; ok && !options.otelMetricsURLSet {
 			options.otelMetricsURL = endpoint + "/metrics"
 		}
-		if endpoint, ok := best.Endpoints["health"]; ok {
+		if endpoint, ok := best.Endpoints["health"]; ok && !options.otelHealthURLSet {
 			options.otelHealthURL = endpoint + "/"
 		}
 	}

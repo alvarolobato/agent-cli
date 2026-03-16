@@ -133,7 +133,7 @@ func mergeDiscoveredAgent(existing DiscoveredAgent, incoming DiscoveredAgent) Di
 	if existing.PID == 0 {
 		existing.PID = incoming.PID
 	}
-	if existing.ConfigPath == "" {
+	if shouldPreferConfigPath(existing, incoming) {
 		existing.ConfigPath = incoming.ConfigPath
 	}
 	if sourcePriority(incoming.Source) < sourcePriority(existing.Source) {
@@ -146,6 +146,18 @@ func mergeDiscoveredAgent(existing DiscoveredAgent, incoming DiscoveredAgent) Di
 	}
 	existing.Children = append(existing.Children, incoming.Children...)
 	return existing
+}
+
+func shouldPreferConfigPath(existing DiscoveredAgent, incoming DiscoveredAgent) bool {
+	incomingPath := incoming.ConfigPath
+	existingPath := existing.ConfigPath
+	if incomingPath == "" {
+		return false
+	}
+	if existingPath == "" {
+		return true
+	}
+	return configSourcePriority(incoming.Source) < configSourcePriority(existing.Source)
 }
 
 func finalizeDiscoveredAgent(a DiscoveredAgent) DiscoveredAgent {
@@ -164,6 +176,19 @@ func sourcePriority(source string) int {
 	case "process":
 		return 0
 	case "path":
+		return 1
+	case "port":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func configSourcePriority(source string) int {
+	switch source {
+	case "path":
+		return 0
+	case "process":
 		return 1
 	case "port":
 		return 2

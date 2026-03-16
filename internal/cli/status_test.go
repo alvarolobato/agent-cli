@@ -233,3 +233,57 @@ func TestAutoDetectStatusOptionsErrorsWhenNothingDiscovered(t *testing.T) {
 		t.Fatalf("expected auto-detect error when no agents discovered")
 	}
 }
+
+func TestAutoDetectStatusOptionsOverridesDefaultElasticURL(t *testing.T) {
+	originalDiscover := discoverAgents
+	t.Cleanup(func() { discoverAgents = originalDiscover })
+	discoverAgents = func(context.Context) ([]discovery.DiscoveredAgent, error) {
+		return []discovery.DiscoveredAgent{
+			{
+				AgentType: "elastic-agent",
+				Endpoints: map[string]string{
+					"status": "http://127.0.0.1:7791",
+				},
+				Source: "process",
+			},
+		}, nil
+	}
+
+	options, err := autoDetectStatusOptions(context.Background(), statusOptions{
+		elasticStatusURL: "http://localhost:6791",
+		elasticURLSet:    false,
+	})
+	if err != nil {
+		t.Fatalf("autoDetectStatusOptions() error = %v", err)
+	}
+	if options.elasticStatusURL != "http://127.0.0.1:7791" {
+		t.Fatalf("expected discovered status URL override, got %q", options.elasticStatusURL)
+	}
+}
+
+func TestAutoDetectStatusOptionsKeepsExplicitElasticURL(t *testing.T) {
+	originalDiscover := discoverAgents
+	t.Cleanup(func() { discoverAgents = originalDiscover })
+	discoverAgents = func(context.Context) ([]discovery.DiscoveredAgent, error) {
+		return []discovery.DiscoveredAgent{
+			{
+				AgentType: "elastic-agent",
+				Endpoints: map[string]string{
+					"status": "http://127.0.0.1:7791",
+				},
+				Source: "process",
+			},
+		}, nil
+	}
+
+	options, err := autoDetectStatusOptions(context.Background(), statusOptions{
+		elasticStatusURL: "http://custom-status:6791",
+		elasticURLSet:    true,
+	})
+	if err != nil {
+		t.Fatalf("autoDetectStatusOptions() error = %v", err)
+	}
+	if options.elasticStatusURL != "http://custom-status:6791" {
+		t.Fatalf("expected explicit status URL to be preserved, got %q", options.elasticStatusURL)
+	}
+}
