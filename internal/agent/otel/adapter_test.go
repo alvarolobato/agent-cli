@@ -157,8 +157,42 @@ func TestHealthURLFallsBackOnInvalidEndpoint(t *testing.T) {
 		},
 	}
 	const fallback = "http://localhost:13133/"
-	got := healthURL(cfg, fallback)
+	got := healthURL(cfg, fallback, false)
 	if strings.TrimSpace(got) != fallback {
 		t.Fatalf("expected fallback %q, got %q", fallback, got)
+	}
+}
+
+func TestAdapterHealthPrefersExplicitHealthCheckURLOverride(t *testing.T) {
+	overrideServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"Server available"}`))
+	}))
+	defer overrideServer.Close()
+
+	cfg, err := config.ParseOTelCollectorConfig("../../../test/fixtures/otel-config.yaml")
+	if err != nil {
+		t.Fatalf("ParseOTelCollectorConfig() error = %v", err)
+	}
+	cfg.Extensions = map[string]config.OTelComponent{
+		"health_check": {
+			Name: "health_check",
+			Type: "health_check",
+			Raw: map[string]interface{}{
+				"endpoint": "http://127.0.0.1:1/",
+			},
+		},
+	}
+
+	adapter := NewAdapterWithOptions(cfg, &fakeZPages{}, &fakeOTelMetrics{}, AdapterOptions{
+		HealthCheckURL: overrideServer.URL,
+		HTTPClient:     overrideServer.Client(),
+	})
+	health, err := adapter.Health(context.Background())
+	if err != nil {
+		t.Fatalf("Health() error = %v", err)
+	}
+	if health != pipeline.Healthy {
+		t.Fatalf("expected health healthy from override URL, got %q", health)
 	}
 }

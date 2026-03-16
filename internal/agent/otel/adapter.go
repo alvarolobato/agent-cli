@@ -49,6 +49,7 @@ type Adapter struct {
 	httpClient        *http.Client
 	prometheusURL     string
 	healthCheckURL    string
+	healthURLOverride bool
 	agentID           string
 	agentType         string
 	pipelineName      string
@@ -90,6 +91,8 @@ func newAdapterWithDeps(
 	httpClient *http.Client,
 	options AdapterOptions,
 ) *Adapter {
+	healthURLOverride := strings.TrimSpace(options.HealthCheckURL) != ""
+
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 5 * time.Second}
 	}
@@ -119,6 +122,7 @@ func newAdapterWithDeps(
 		httpClient:        httpClient,
 		prometheusURL:     options.PrometheusURL,
 		healthCheckURL:    options.HealthCheckURL,
+		healthURLOverride: healthURLOverride,
 		agentID:           options.AgentID,
 		agentType:         options.AgentType,
 		pipelineName:      options.PipelineName,
@@ -239,7 +243,7 @@ func (a *Adapter) Status(ctx context.Context) (*pipeline.Pipeline, error) {
 
 // Health returns top-level health using the health_check endpoint.
 func (a *Adapter) Health(ctx context.Context) (pipeline.HealthStatus, error) {
-	url := healthURL(a.cfg, a.healthCheckURL)
+	url := healthURL(a.cfg, a.healthCheckURL, a.healthURLOverride)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -425,7 +429,13 @@ func readString(payload map[string]interface{}, key string) string {
 	return value
 }
 
-func healthURL(cfg *config.OTelCollectorConfig, fallback string) string {
+func healthURL(cfg *config.OTelCollectorConfig, fallback string, preferFallback bool) string {
+	if preferFallback {
+		if normalized, ok := normalizeHealthEndpoint(fallback); ok {
+			return normalized
+		}
+	}
+
 	if cfg == nil {
 		return fallback
 	}

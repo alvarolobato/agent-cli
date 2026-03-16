@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	stdhtml "html"
 	"io"
 	"net/http"
 	"net/url"
@@ -268,6 +269,7 @@ func parsePipelinezHTML(html string) ([]PipelineStatus, error) {
 }
 
 func parsePipelinezCollectorHTML(html string) ([]PipelineStatus, error) {
+	html = stdhtml.UnescapeString(html)
 	linkRe := regexp.MustCompile(`zpipelinename=([^"&]+)&zcomponentname=([^"&]+)&zcomponentkind=([^"&]+)`)
 	matches := linkRe.FindAllStringSubmatch(html, -1)
 	if len(matches) == 0 {

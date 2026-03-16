@@ -123,3 +123,19 @@ func TestParsePipelinezHTMLUnsupportedShapeError(t *testing.T) {
 		t.Fatalf("expected explicit no-pipeline error, got %q", err.Error())
 	}
 }
+
+func TestParsePipelinezCollectorHTMLParsesEscapedLinks(t *testing.T) {
+	pipelines, err := parsePipelinezCollectorHTML(`<html><body><a href="/debug/pipelinez?zpipelinename=logs&amp;zcomponentname=otlp&amp;zcomponentkind=receiver">receiver</a></body></html>`)
+	if err != nil {
+		t.Fatalf("parsePipelinezCollectorHTML() error = %v", err)
+	}
+	if len(pipelines) != 1 {
+		t.Fatalf("expected 1 pipeline, got %d", len(pipelines))
+	}
+	if pipelines[0].Name != "logs" {
+		t.Fatalf("expected logs pipeline, got %q", pipelines[0].Name)
+	}
+	if len(pipelines[0].Receivers) != 1 || pipelines[0].Receivers[0].ID != "otlp" {
+		t.Fatalf("expected receiver otlp, got %#v", pipelines[0].Receivers)
+	}
+}
