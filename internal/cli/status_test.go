@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/alvarolobato/agent-cli/internal/discovery"
 	"github.com/alvarolobato/agent-cli/internal/pipeline"
 )
 
@@ -183,5 +185,51 @@ func TestStatusCommandJSONOTel(t *testing.T) {
 	}
 	if !strings.Contains(payload, `"label": "OTLP receiver"`) {
 		t.Fatalf("expected friendly OTLP label in OTel JSON output, got %s", payload)
+	}
+}
+
+func TestAutoDetectStatusOptionsUsesDiscoveredConfigAndEndpoints(t *testing.T) {
+	originalDiscover := discoverAgents
+	t.Cleanup(func() { discoverAgents = originalDiscover })
+	discoverAgents = func(context.Context) ([]discovery.DiscoveredAgent, error) {
+		return []discovery.DiscoveredAgent{
+			{
+				AgentType:  "edot",
+				ConfigPath: "/etc/edot/config.yaml",
+				Endpoints: map[string]string{
+					"zpages":  "http://localhost:55679",
+					"metrics": "http://localhost:8888",
+					"health":  "http://localhost:13133",
+				},
+				Source: "process",
+			},
+		}, nil
+	}
+
+	options, err := autoDetectStatusOptions(context.Background(), statusOptions{})
+	if err != nil {
+		t.Fatalf("autoDetectStatusOptions() error = %v", err)
+	}
+	if options.agentType != "edot" {
+		t.Fatalf("expected edot agent type, got %q", options.agentType)
+	}
+	if options.edotConfig != "/etc/edot/config.yaml" {
+		t.Fatalf("expected discovered config path, got %q", options.edotConfig)
+	}
+	if options.edotMetricsURL != "http://localhost:8888/metrics" {
+		t.Fatalf("expected discovered metrics URL, got %q", options.edotMetricsURL)
+	}
+}
+
+func TestAutoDetectStatusOptionsErrorsWhenNothingDiscovered(t *testing.T) {
+	originalDiscover := discoverAgents
+	t.Cleanup(func() { discoverAgents = originalDiscover })
+	discoverAgents = func(context.Context) ([]discovery.DiscoveredAgent, error) {
+		return nil, nil
+	}
+
+	_, err := autoDetectStatusOptions(context.Background(), statusOptions{})
+	if err == nil {
+		t.Fatalf("expected auto-detect error when no agents discovered")
 	}
 }

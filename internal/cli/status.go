@@ -14,6 +14,7 @@ import (
 	"github.com/alvarolobato/agent-cli/internal/agent/elasticagent"
 	"github.com/alvarolobato/agent-cli/internal/agent/otel"
 	"github.com/alvarolobato/agent-cli/internal/config"
+	"github.com/alvarolobato/agent-cli/internal/discovery"
 	"github.com/alvarolobato/agent-cli/internal/metrics"
 	"github.com/alvarolobato/agent-cli/internal/output"
 	"github.com/alvarolobato/agent-cli/internal/pipeline"
@@ -102,13 +103,21 @@ type statusOptions struct {
 	otelHealthURL    string
 }
 
+var discoverAgents = func(ctx context.Context) ([]discovery.DiscoveredAgent, error) {
+	return discovery.NewOrchestrator().DiscoverDetailed(ctx)
+}
+
 func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeline, error) {
-	if options.agentType == "" {
-		return pipeline.ExamplePipeline(), nil
-	}
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if options.agentType == "" {
+		var err error
+		options, err = autoDetectStatusOptions(ctx, options)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	switch options.agentType {
@@ -164,6 +173,83 @@ func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeli
 		return adapter.Status(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported --agent value %q", options.agentType)
+	}
+}
+
+func autoDetectStatusOptions(ctx context.Context, options statusOptions) (statusOptions, error) {
+	discovered, err := discoverAgents(ctx)
+	if err != nil {
+		return options, err
+	}
+	if len(discovered) == 0 {
+		return options, errors.New("no local agents discovered; pass --agent and explicit config flags")
+	}
+
+	best := selectPreferredAgent(discovered)
+	options.agentType = best.AgentType
+
+	switch best.AgentType {
+	case "elastic-agent":
+		if strings.TrimSpace(options.elasticConfig) == "" {
+			options.elasticConfig = best.ConfigPath
+		}
+		if endpoint, ok := best.Endpoints["status"]; ok && strings.TrimSpace(options.elasticStatusURL) == "" {
+			options.elasticStatusURL = endpoint
+		}
+	case "edot":
+		if strings.TrimSpace(options.edotConfig) == "" {
+			options.edotConfig = best.ConfigPath
+		}
+		if endpoint, ok := best.Endpoints["zpages"]; ok {
+			options.edotZPagesURL = endpoint
+		}
+		if endpoint, ok := best.Endpoints["metrics"]; ok {
+			options.edotMetricsURL = endpoint + "/metrics"
+		}
+		if endpoint, ok := best.Endpoints["health"]; ok {
+			options.edotHealthURL = endpoint + "/"
+		}
+	case "otel":
+		if strings.TrimSpace(options.otelConfig) == "" {
+			options.otelConfig = best.ConfigPath
+		}
+		if endpoint, ok := best.Endpoints["zpages"]; ok {
+			options.otelZPagesURL = endpoint
+		}
+		if endpoint, ok := best.Endpoints["metrics"]; ok {
+			options.otelMetricsURL = endpoint + "/metrics"
+		}
+		if endpoint, ok := best.Endpoints["health"]; ok {
+			options.otelHealthURL = endpoint + "/"
+		}
+	}
+
+	return options, nil
+}
+
+func selectPreferredAgent(agents []discovery.DiscoveredAgent) discovery.DiscoveredAgent {
+	best := agents[0]
+	bestScore := discoveryPriority(best.AgentType)
+	for i := 1; i < len(agents); i++ {
+		score := discoveryPriority(agents[i].AgentType)
+		if score < bestScore {
+			best = agents[i]
+			bestScore = score
+		}
+	}
+	return best
+}
+
+func discoveryPriority(agentType string) int {
+	switch agentType {
+	case "elastic-agent":
+		return 0
+	case "edot":
+		return 1
+	case "otel":
+		return 2
+	default:
+		return 3
 	}
 }
 

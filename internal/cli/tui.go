@@ -18,6 +18,10 @@ func newTUICommand() *cobra.Command {
 	var edotZPagesURL string
 	var edotMetricsURL string
 	var edotHealthURL string
+	var otelConfigPath string
+	var otelZPagesURL string
+	var otelMetricsURL string
+	var otelHealthURL string
 
 	cmd := &cobra.Command{
 		Use:   "tui",
@@ -31,6 +35,10 @@ func newTUICommand() *cobra.Command {
 				edotZPagesURL:    edotZPagesURL,
 				edotMetricsURL:   edotMetricsURL,
 				edotHealthURL:    edotHealthURL,
+				otelConfig:       otelConfigPath,
+				otelZPagesURL:    otelZPagesURL,
+				otelMetricsURL:   otelMetricsURL,
+				otelHealthURL:    otelHealthURL,
 			})
 			if err != nil {
 				return err
@@ -50,6 +58,10 @@ func newTUICommand() *cobra.Command {
 	cmd.Flags().StringVar(&edotZPagesURL, "edot-zpages-url", "http://localhost:55679", "EDOT zpages base URL")
 	cmd.Flags().StringVar(&edotMetricsURL, "edot-metrics-url", "http://localhost:8888/metrics", "EDOT Prometheus metrics endpoint")
 	cmd.Flags().StringVar(&edotHealthURL, "edot-health-url", "http://localhost:13133/", "EDOT health_check endpoint")
+	cmd.Flags().StringVar(&otelConfigPath, "otel-config", "", "Path to OTel collector YAML config")
+	cmd.Flags().StringVar(&otelZPagesURL, "otel-zpages-url", "http://localhost:55679", "OTel zpages base URL")
+	cmd.Flags().StringVar(&otelMetricsURL, "otel-metrics-url", "http://localhost:8888/metrics", "OTel Prometheus metrics endpoint")
+	cmd.Flags().StringVar(&otelHealthURL, "otel-health-url", "http://localhost:13133/", "OTel health_check endpoint")
 
 	return cmd
 }
