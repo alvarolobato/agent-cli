@@ -54,7 +54,7 @@ func (s *processScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error
 			continue
 		}
 		configPath, endpoints := parseProcessArguments(proc.Args)
-		configPath = inferConfigPath(proc, typ, configPath)
+		configPath = strings.TrimSpace(configPath)
 
 		if child {
 			children = append(children, childCandidate{
@@ -122,12 +122,6 @@ func (s *processScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error
 		return append(append(parents, standalone...), childrenToStandalone(unmatched)...), nil
 	}
 	return append(standalone, childrenToStandalone(children)...), nil
-}
-
-func inferConfigPath(proc ProcessInfo, agentType string, current string) string {
-	_ = proc
-	_ = agentType
-	return strings.TrimSpace(current)
 }
 
 func defaultProcessProvider(ctx context.Context) ([]ProcessInfo, error) {

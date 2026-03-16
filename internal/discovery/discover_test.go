@@ -257,6 +257,32 @@ func TestOrchestratorPrefersPathConfigOverProcessGuess(t *testing.T) {
 	}
 }
 
+func TestOrchestratorDoesNotCollapseMultipleProcessInstances(t *testing.T) {
+	o := &Orchestrator{
+		strategies: []Strategy{
+			staticStrategy{agents: []DiscoveredAgent{
+				{AgentType: "elastic-agent", PID: 100, Source: "process"},
+				{AgentType: "elastic-agent", PID: 200, Source: "process"},
+			}},
+		},
+	}
+
+	agents, err := o.DiscoverDetailed(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverDetailed() error = %v", err)
+	}
+	if len(agents) != 2 {
+		t.Fatalf("expected two elastic-agent instances, got %d", len(agents))
+	}
+}
+
+func TestDiscoveredAgentIDIncludesPIDWhenAvailable(t *testing.T) {
+	a := DiscoveredAgent{AgentType: "elastic-agent", PID: 714}
+	if got := a.ID(); got != "elastic-agent:714" {
+		t.Fatalf("expected PID-qualified ID, got %q", got)
+	}
+}
+
 func TestProcessScannerAttachesChildrenByPPIDWhenMultipleParents(t *testing.T) {
 	provider := func(context.Context) ([]ProcessInfo, error) {
 		return []ProcessInfo{
@@ -286,12 +312,13 @@ func TestProcessScannerAttachesChildrenByPPIDWhenMultipleParents(t *testing.T) {
 }
 
 func TestProcessScannerWithNilProviderUsesDefault(t *testing.T) {
-	strategy := NewProcessScannerWithProvider(nil)
-	agents, err := strategy.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover() error = %v", err)
+	strategy, ok := NewProcessScannerWithProvider(nil).(*processScanner)
+	if !ok {
+		t.Fatalf("expected processScanner strategy type")
 	}
-	_ = agents
+	if strategy.listProcesses == nil {
+		t.Fatalf("expected default process provider to be set")
+	}
 }
 
 type staticStrategy struct {

@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/alvarolobato/agent-cli/internal/agent"
@@ -49,10 +50,10 @@ type DiscoveredAgent struct {
 
 func (a DiscoveredAgent) ID() string {
 	if a.PID > 0 {
-		return a.AgentType
+		return fmt.Sprintf("%s:%d", a.AgentType, a.PID)
 	}
 	if a.ConfigPath != "" {
-		return a.ConfigPath
+		return fmt.Sprintf("%s:%s", a.AgentType, a.ConfigPath)
 	}
 	return a.AgentType
 }
@@ -71,8 +72,7 @@ func (a DiscoveredAgent) Health(context.Context) (pipeline.HealthStatus, error) 
 
 // DiscoverDetailed executes all strategies and aggregates discovered agents.
 func (o *Orchestrator) DiscoverDetailed(ctx context.Context) ([]DiscoveredAgent, error) {
-	merged := make(map[string]DiscoveredAgent)
-	order := make([]string, 0)
+	merged := make([]DiscoveredAgent, 0)
 
 	for _, strategy := range o.strategies {
 		agents, err := strategy.Discover(ctx)
@@ -80,20 +80,19 @@ func (o *Orchestrator) DiscoverDetailed(ctx context.Context) ([]DiscoveredAgent,
 			return nil, err
 		}
 		for _, a := range agents {
-			key := discoveredAgentKey(a)
-			if _, ok := merged[key]; !ok {
-				merged[key] = normalizeDiscoveredAgent(a)
-				order = append(order, key)
+			a = normalizeDiscoveredAgent(a)
+			idx := findMergeIndex(merged, a)
+			if idx == -1 {
+				merged = append(merged, a)
 				continue
 			}
-			existing := merged[key]
-			merged[key] = mergeDiscoveredAgent(existing, a)
+			merged[idx] = mergeDiscoveredAgent(merged[idx], a)
 		}
 	}
 
-	out := make([]DiscoveredAgent, 0, len(order))
-	for _, key := range order {
-		out = append(out, finalizeDiscoveredAgent(merged[key]))
+	out := make([]DiscoveredAgent, 0, len(merged))
+	for _, a := range merged {
+		out = append(out, finalizeDiscoveredAgent(a))
 	}
 	return out, nil
 }
@@ -112,8 +111,72 @@ func (o *Orchestrator) Discover(ctx context.Context) ([]agent.Agent, error) {
 	return out, nil
 }
 
-func discoveredAgentKey(a DiscoveredAgent) string {
-	return a.AgentType
+func findMergeIndex(merged []DiscoveredAgent, incoming DiscoveredAgent) int {
+	if incoming.PID > 0 {
+		for i := range merged {
+			if merged[i].AgentType == incoming.AgentType && merged[i].PID == incoming.PID {
+				return i
+			}
+		}
+	}
+	if incoming.ConfigPath != "" {
+		for i := range merged {
+			if merged[i].AgentType == incoming.AgentType && merged[i].ConfigPath == incoming.ConfigPath && merged[i].ConfigPath != "" {
+				return i
+			}
+		}
+	}
+	if idx := findByEndpointOverlap(merged, incoming); idx != -1 {
+		return idx
+	}
+	typeMatches := make([]int, 0, len(merged))
+	for i := range merged {
+		if merged[i].AgentType == incoming.AgentType {
+			typeMatches = append(typeMatches, i)
+		}
+	}
+	if len(typeMatches) != 1 {
+		return -1
+	}
+	only := typeMatches[0]
+	if canFallbackMerge(merged[only], incoming) {
+		return only
+	}
+	return -1
+}
+
+func findByEndpointOverlap(merged []DiscoveredAgent, incoming DiscoveredAgent) int {
+	if len(incoming.Endpoints) == 0 {
+		return -1
+	}
+	for i := range merged {
+		if merged[i].AgentType != incoming.AgentType || len(merged[i].Endpoints) == 0 {
+			continue
+		}
+		for key, value := range incoming.Endpoints {
+			if value == "" {
+				continue
+			}
+			if merged[i].Endpoints[key] == value {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func canFallbackMerge(existing DiscoveredAgent, incoming DiscoveredAgent) bool {
+	if existing.PID > 0 && incoming.PID > 0 && existing.PID != incoming.PID {
+		return false
+	}
+	if existing.ConfigPath != "" &&
+		incoming.ConfigPath != "" &&
+		existing.ConfigPath != incoming.ConfigPath &&
+		existing.Source == "path" &&
+		incoming.Source == "path" {
+		return false
+	}
+	return true
 }
 
 func normalizeDiscoveredAgent(a DiscoveredAgent) DiscoveredAgent {
