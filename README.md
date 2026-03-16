@@ -8,6 +8,24 @@ Supported targets today:
 - EDOT Collector
 - Generic OpenTelemetry Collector
 
+## Project Description
+
+`agent-cli` is a terminal-first operational tool for understanding how telemetry is flowing through local agent pipelines and where it is failing.
+
+It combines static configuration parsing with live runtime signals so operators can:
+
+- inspect pipeline topology (`inputs/receivers -> processors -> outputs/exporters`)
+- assess normalized component health (`healthy`, `degraded`, `error`, `disabled`, `unknown`)
+- view key throughput and failure indicators (events, drops, send failures)
+- spot misconfigurations such as missing wiring or disabled/orphaned components
+- use both human-oriented terminal views (table/TUI) and machine-friendly output (`--format json`)
+
+The codebase uses a layered adapter architecture so each agent type maps into a shared pipeline model:
+
+- Elastic Agent adapter
+- EDOT adapter
+- Generic OTel adapter
+
 ## Project Status
 
 - **Merged:** Phase 0, Phase 1A, Phase 1B, Phase 1C
@@ -22,6 +40,13 @@ Prerequisites: Go `1.24+`
 ```bash
 git clone https://github.com/alvarolobato/agent-cli.git
 cd agent-cli
+make build
+./bin/agent-cli --help
+```
+
+Alternative without Make:
+
+```bash
 go build -o bin/agent-cli ./cmd/agent-cli
 ./bin/agent-cli --help
 ```
