@@ -18,19 +18,34 @@ func newTUICommand() *cobra.Command {
 	var edotZPagesURL string
 	var edotMetricsURL string
 	var edotHealthURL string
+	var otelConfigPath string
+	var otelZPagesURL string
+	var otelMetricsURL string
+	var otelHealthURL string
 
 	cmd := &cobra.Command{
 		Use:   "tui",
 		Short: "Launch interactive TUI",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pipe, err := statusPipeline(cmd, statusOptions{
-				agentType:        agentType,
-				elasticConfig:    elasticConfigPath,
-				elasticStatusURL: elasticStatusURL,
-				edotConfig:       edotConfigPath,
-				edotZPagesURL:    edotZPagesURL,
-				edotMetricsURL:   edotMetricsURL,
-				edotHealthURL:    edotHealthURL,
+				agentType:         agentType,
+				elasticConfig:     elasticConfigPath,
+				elasticStatusURL:  elasticStatusURL,
+				elasticURLSet:     cmd.Flags().Changed("elastic-url"),
+				edotConfig:        edotConfigPath,
+				edotZPagesURL:     edotZPagesURL,
+				edotZPagesURLSet:  cmd.Flags().Changed("edot-zpages-url"),
+				edotMetricsURL:    edotMetricsURL,
+				edotMetricsURLSet: cmd.Flags().Changed("edot-metrics-url"),
+				edotHealthURL:     edotHealthURL,
+				edotHealthURLSet:  cmd.Flags().Changed("edot-health-url"),
+				otelConfig:        otelConfigPath,
+				otelZPagesURL:     otelZPagesURL,
+				otelZPagesURLSet:  cmd.Flags().Changed("otel-zpages-url"),
+				otelMetricsURL:    otelMetricsURL,
+				otelMetricsURLSet: cmd.Flags().Changed("otel-metrics-url"),
+				otelHealthURL:     otelHealthURL,
+				otelHealthURLSet:  cmd.Flags().Changed("otel-health-url"),
 			})
 			if err != nil {
 				return err
@@ -50,6 +65,10 @@ func newTUICommand() *cobra.Command {
 	cmd.Flags().StringVar(&edotZPagesURL, "edot-zpages-url", "http://localhost:55679", "EDOT zpages base URL")
 	cmd.Flags().StringVar(&edotMetricsURL, "edot-metrics-url", "http://localhost:8888/metrics", "EDOT Prometheus metrics endpoint")
 	cmd.Flags().StringVar(&edotHealthURL, "edot-health-url", "http://localhost:13133/", "EDOT health_check endpoint")
+	cmd.Flags().StringVar(&otelConfigPath, "otel-config", "", "Path to OTel collector YAML config")
+	cmd.Flags().StringVar(&otelZPagesURL, "otel-zpages-url", "http://localhost:55679", "OTel zpages base URL")
+	cmd.Flags().StringVar(&otelMetricsURL, "otel-metrics-url", "http://localhost:8888/metrics", "OTel Prometheus metrics endpoint")
+	cmd.Flags().StringVar(&otelHealthURL, "otel-health-url", "http://localhost:13133/", "OTel health_check endpoint")
 
 	return cmd
 }

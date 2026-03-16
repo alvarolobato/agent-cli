@@ -14,6 +14,7 @@ import (
 	"github.com/alvarolobato/agent-cli/internal/agent/elasticagent"
 	"github.com/alvarolobato/agent-cli/internal/agent/otel"
 	"github.com/alvarolobato/agent-cli/internal/config"
+	"github.com/alvarolobato/agent-cli/internal/discovery"
 	"github.com/alvarolobato/agent-cli/internal/metrics"
 	"github.com/alvarolobato/agent-cli/internal/output"
 	"github.com/alvarolobato/agent-cli/internal/pipeline"
@@ -39,17 +40,24 @@ func newStatusCommand() *cobra.Command {
 		Short: "Show a pipeline-oriented status report",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			model, err := statusPipeline(cmd, statusOptions{
-				agentType:        agentType,
-				elasticConfig:    elasticConfigPath,
-				elasticStatusURL: elasticStatusURL,
-				edotConfig:       edotConfigPath,
-				edotZPagesURL:    edotZPagesURL,
-				edotMetricsURL:   edotMetricsURL,
-				edotHealthURL:    edotHealthURL,
-				otelConfig:       otelConfigPath,
-				otelZPagesURL:    otelZPagesURL,
-				otelMetricsURL:   otelMetricsURL,
-				otelHealthURL:    otelHealthURL,
+				agentType:         agentType,
+				elasticConfig:     elasticConfigPath,
+				elasticStatusURL:  elasticStatusURL,
+				elasticURLSet:     cmd.Flags().Changed("elastic-url"),
+				edotConfig:        edotConfigPath,
+				edotZPagesURL:     edotZPagesURL,
+				edotZPagesURLSet:  cmd.Flags().Changed("edot-zpages-url"),
+				edotMetricsURL:    edotMetricsURL,
+				edotMetricsURLSet: cmd.Flags().Changed("edot-metrics-url"),
+				edotHealthURL:     edotHealthURL,
+				edotHealthURLSet:  cmd.Flags().Changed("edot-health-url"),
+				otelConfig:        otelConfigPath,
+				otelZPagesURL:     otelZPagesURL,
+				otelZPagesURLSet:  cmd.Flags().Changed("otel-zpages-url"),
+				otelMetricsURL:    otelMetricsURL,
+				otelMetricsURLSet: cmd.Flags().Changed("otel-metrics-url"),
+				otelHealthURL:     otelHealthURL,
+				otelHealthURLSet:  cmd.Flags().Changed("otel-health-url"),
 			})
 			if err != nil {
 				return err
@@ -89,26 +97,41 @@ func newStatusCommand() *cobra.Command {
 }
 
 type statusOptions struct {
-	agentType        string
-	elasticConfig    string
-	elasticStatusURL string
-	edotConfig       string
-	edotZPagesURL    string
-	edotMetricsURL   string
-	edotHealthURL    string
-	otelConfig       string
-	otelZPagesURL    string
-	otelMetricsURL   string
-	otelHealthURL    string
+	agentType         string
+	elasticConfig     string
+	elasticStatusURL  string
+	elasticURLSet     bool
+	edotConfig        string
+	edotZPagesURL     string
+	edotZPagesURLSet  bool
+	edotMetricsURL    string
+	edotMetricsURLSet bool
+	edotHealthURL     string
+	edotHealthURLSet  bool
+	otelConfig        string
+	otelZPagesURL     string
+	otelZPagesURLSet  bool
+	otelMetricsURL    string
+	otelMetricsURLSet bool
+	otelHealthURL     string
+	otelHealthURLSet  bool
+}
+
+var discoverAgents = func(ctx context.Context) ([]discovery.DiscoveredAgent, error) {
+	return discovery.NewOrchestrator().DiscoverDetailed(ctx)
 }
 
 func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeline, error) {
-	if options.agentType == "" {
-		return pipeline.ExamplePipeline(), nil
-	}
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if options.agentType == "" {
+		var err error
+		options, err = autoDetectStatusOptions(ctx, options)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	switch options.agentType {
@@ -164,6 +187,99 @@ func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeli
 		return adapter.Status(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported --agent value %q", options.agentType)
+	}
+}
+
+func autoDetectStatusOptions(ctx context.Context, options statusOptions) (statusOptions, error) {
+	discovered, err := discoverAgents(ctx)
+	if err != nil {
+		return options, err
+	}
+	if len(discovered) == 0 {
+		return options, errors.New("no local agents discovered; pass --agent and explicit config flags")
+	}
+
+	best, bestErr := selectPreferredAgent(discovered)
+	if bestErr != nil {
+		return options, bestErr
+	}
+	options.agentType = best.AgentType
+
+	switch best.AgentType {
+	case "elastic-agent":
+		if strings.TrimSpace(options.elasticConfig) == "" {
+			options.elasticConfig = best.ConfigPath
+		}
+		if endpoint, ok := best.Endpoints["status"]; ok && !options.elasticURLSet {
+			options.elasticStatusURL = endpoint
+		}
+	case "edot":
+		if strings.TrimSpace(options.edotConfig) == "" {
+			options.edotConfig = best.ConfigPath
+		}
+		if endpoint, ok := best.Endpoints["zpages"]; ok && !options.edotZPagesURLSet {
+			options.edotZPagesURL = endpoint
+		}
+		if endpoint, ok := best.Endpoints["metrics"]; ok && !options.edotMetricsURLSet {
+			options.edotMetricsURL = endpoint + "/metrics"
+		}
+		if endpoint, ok := best.Endpoints["health"]; ok && !options.edotHealthURLSet {
+			options.edotHealthURL = endpoint + "/"
+		}
+	case "otel":
+		if strings.TrimSpace(options.otelConfig) == "" {
+			options.otelConfig = best.ConfigPath
+		}
+		if endpoint, ok := best.Endpoints["zpages"]; ok && !options.otelZPagesURLSet {
+			options.otelZPagesURL = endpoint
+		}
+		if endpoint, ok := best.Endpoints["metrics"]; ok && !options.otelMetricsURLSet {
+			options.otelMetricsURL = endpoint + "/metrics"
+		}
+		if endpoint, ok := best.Endpoints["health"]; ok && !options.otelHealthURLSet {
+			options.otelHealthURL = endpoint + "/"
+		}
+	}
+
+	return options, nil
+}
+
+func selectPreferredAgent(agents []discovery.DiscoveredAgent) (discovery.DiscoveredAgent, error) {
+	best := agents[0]
+	bestScore := discoveryPriority(best.AgentType)
+	tied := []discovery.DiscoveredAgent{best}
+	for i := 1; i < len(agents); i++ {
+		score := discoveryPriority(agents[i].AgentType)
+		if score < bestScore {
+			best = agents[i]
+			bestScore = score
+			tied = []discovery.DiscoveredAgent{agents[i]}
+			continue
+		}
+		if score == bestScore {
+			tied = append(tied, agents[i])
+		}
+	}
+	if len(tied) > 1 {
+		typeLabel := tied[0].AgentType
+		if strings.TrimSpace(typeLabel) == "" {
+			typeLabel = "unknown"
+		}
+		return discovery.DiscoveredAgent{}, fmt.Errorf("multiple %s agents discovered; pass --agent and explicit config flags", typeLabel)
+	}
+	return best, nil
+}
+
+func discoveryPriority(agentType string) int {
+	switch agentType {
+	case "elastic-agent":
+		return 0
+	case "edot":
+		return 1
+	case "otel":
+		return 2
+	default:
+		return 3
 	}
 }
 
