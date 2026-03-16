@@ -197,6 +197,32 @@ func TestPortProberIncludesPrometheusForOTelAndEDOT(t *testing.T) {
 	}
 }
 
+func TestPortProberReturnsDeterministicTypeOrder(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/metrics" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	endpoints := []endpointProbe{
+		{agentType: "otel", url: server.URL, checkPath: "/metrics", key: "metrics"},
+		{agentType: "edot", url: server.URL, checkPath: "/metrics", key: "metrics"},
+	}
+	agents, err := NewPortProberWithClient(server.Client(), endpoints).Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	if len(agents) != 2 {
+		t.Fatalf("expected 2 agents, got %d", len(agents))
+	}
+	if agents[0].AgentType != "edot" || agents[1].AgentType != "otel" {
+		t.Fatalf("expected deterministic ordering [edot, otel], got [%s, %s]", agents[0].AgentType, agents[1].AgentType)
+	}
+}
+
 func TestPathScannerChecksEDOTPathsOnDarwinAndLinux(t *testing.T) {
 	checked := make([]string, 0)
 	stat := func(path string) error {
@@ -308,6 +334,45 @@ func TestProcessScannerAttachesChildrenByPPIDWhenMultipleParents(t *testing.T) {
 		if a.PID == 100 && len(a.Children) != 0 {
 			t.Fatalf("expected no children on PID 100 parent, got %+v", a.Children)
 		}
+	}
+}
+
+func TestProcessScannerLeavesUnmatchedChildStandaloneWithSingleParent(t *testing.T) {
+	provider := func(context.Context) ([]ProcessInfo, error) {
+		return []ProcessInfo{
+			{PID: 100, Name: "elastic-agent"},
+			{PID: 201, PPID: 100, Name: "agentbeat", Args: []string{"metricbeat"}},
+			{PID: 300, PPID: 999, Name: "elastic-otel-collector", Args: []string{"--config", "/etc/edot/config.yaml"}},
+		}, nil
+	}
+
+	strategy := NewProcessScannerWithProvider(provider)
+	agents, err := strategy.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover() error = %v", err)
+	}
+	if len(agents) != 2 {
+		t.Fatalf("expected parent plus standalone child, got %d agents", len(agents))
+	}
+
+	var parent DiscoveredAgent
+	var standalone DiscoveredAgent
+	for _, a := range agents {
+		if a.AgentType == "elastic-agent" && a.PID == 100 {
+			parent = a
+		}
+		if a.AgentType == "edot" && a.PID == 300 {
+			standalone = a
+		}
+	}
+	if parent.PID == 0 {
+		t.Fatalf("expected elastic-agent parent in results, got %+v", agents)
+	}
+	if len(parent.Children) != 1 {
+		t.Fatalf("expected only PPID-matched child attached, got %+v", parent.Children)
+	}
+	if standalone.PID == 0 {
+		t.Fatalf("expected unmatched child to remain standalone, got %+v", agents)
 	}
 }
 

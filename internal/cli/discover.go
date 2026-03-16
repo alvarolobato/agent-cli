@@ -14,7 +14,11 @@ func newDiscoverCommand() *cobra.Command {
 		Use:   "discover",
 		Short: "Discover local agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agents, err := discovery.NewOrchestrator().DiscoverDetailed(context.Background())
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			agents, err := discovery.NewOrchestrator().DiscoverDetailed(ctx)
 			if err != nil {
 				return err
 			}

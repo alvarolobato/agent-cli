@@ -287,3 +287,22 @@ func TestAutoDetectStatusOptionsKeepsExplicitElasticURL(t *testing.T) {
 		t.Fatalf("expected explicit status URL to be preserved, got %q", options.elasticStatusURL)
 	}
 }
+
+func TestAutoDetectStatusOptionsErrorsWhenPreferredTypeIsAmbiguous(t *testing.T) {
+	originalDiscover := discoverAgents
+	t.Cleanup(func() { discoverAgents = originalDiscover })
+	discoverAgents = func(context.Context) ([]discovery.DiscoveredAgent, error) {
+		return []discovery.DiscoveredAgent{
+			{AgentType: "elastic-agent", PID: 100, Source: "process"},
+			{AgentType: "elastic-agent", PID: 200, Source: "process"},
+		}, nil
+	}
+
+	_, err := autoDetectStatusOptions(context.Background(), statusOptions{})
+	if err == nil {
+		t.Fatalf("expected error when multiple preferred agents are discovered")
+	}
+	if !strings.Contains(err.Error(), "multiple elastic-agent agents discovered") {
+		t.Fatalf("unexpected ambiguity error: %v", err)
+	}
+}

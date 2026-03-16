@@ -199,7 +199,10 @@ func autoDetectStatusOptions(ctx context.Context, options statusOptions) (status
 		return options, errors.New("no local agents discovered; pass --agent and explicit config flags")
 	}
 
-	best := selectPreferredAgent(discovered)
+	best, bestErr := selectPreferredAgent(discovered)
+	if bestErr != nil {
+		return options, bestErr
+	}
 	options.agentType = best.AgentType
 
 	switch best.AgentType {
@@ -241,17 +244,30 @@ func autoDetectStatusOptions(ctx context.Context, options statusOptions) (status
 	return options, nil
 }
 
-func selectPreferredAgent(agents []discovery.DiscoveredAgent) discovery.DiscoveredAgent {
+func selectPreferredAgent(agents []discovery.DiscoveredAgent) (discovery.DiscoveredAgent, error) {
 	best := agents[0]
 	bestScore := discoveryPriority(best.AgentType)
+	tied := []discovery.DiscoveredAgent{best}
 	for i := 1; i < len(agents); i++ {
 		score := discoveryPriority(agents[i].AgentType)
 		if score < bestScore {
 			best = agents[i]
 			bestScore = score
+			tied = []discovery.DiscoveredAgent{agents[i]}
+			continue
+		}
+		if score == bestScore {
+			tied = append(tied, agents[i])
 		}
 	}
-	return best
+	if len(tied) > 1 {
+		typeLabel := tied[0].AgentType
+		if strings.TrimSpace(typeLabel) == "" {
+			typeLabel = "unknown"
+		}
+		return discovery.DiscoveredAgent{}, fmt.Errorf("multiple %s agents discovered; pass --agent and explicit config flags", typeLabel)
+	}
+	return best, nil
 }
 
 func discoveryPriority(agentType string) int {

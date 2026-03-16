@@ -99,15 +99,6 @@ func (s *processScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error
 				attached[i] = true
 			}
 		}
-		if len(parents) == 1 {
-			for i := range children {
-				if attached[i] {
-					continue
-				}
-				parents[0].Children = append(parents[0].Children, children[i].child)
-				attached[i] = true
-			}
-		}
 
 		unmatched := make([]childCandidate, 0, len(children))
 		for i := range children {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -75,6 +76,12 @@ func (s *portProber) Discover(ctx context.Context) ([]DiscoveredAgent, error) {
 	for _, a := range byType {
 		out = append(out, a)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].AgentType == out[j].AgentType {
+			return out[i].ID() < out[j].ID()
+		}
+		return out[i].AgentType < out[j].AgentType
+	})
 	return out, nil
 }
 
