@@ -2,6 +2,12 @@ package pipeline
 
 import "time"
 
+const (
+	MetadataAgentVersion = "agent_version"
+	MetadataAgentFlavor  = "agent_flavor"
+	MetadataSocketPath   = "socket_path"
+)
+
 // Pipeline is a graph model of an agent data flow.
 type Pipeline struct {
 	Name      string            `json:"name"`

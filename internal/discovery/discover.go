@@ -24,6 +24,8 @@ func NewOrchestrator() *Orchestrator {
 	return &Orchestrator{
 		strategies: []Strategy{
 			NewProcessScanner(),
+			NewServiceScanner(),
+			NewInstallDirScanner(),
 			NewPathScanner(),
 			NewPortProber(),
 		},

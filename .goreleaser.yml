@@ -27,9 +27,46 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
+
+signs:
+  - cmd: sh
+    args:
+      - "-c"
+      - 'if command -v cosign >/dev/null 2>&1; then cosign sign-blob --yes --output-signature "${signature}" --output-certificate "${certificate}" "${artifact}"; else echo "cosign not found; skipping signature"; fi'
+    artifacts: checksum
+    output: true
+
+dockers:
+  - id: agent-cli-docker-amd64
+    use: buildx
+    dockerfile: Dockerfile.release
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/alvarolobato/agent-cli:{{ .Version }}-amd64"
+      - "ghcr.io/alvarolobato/agent-cli:latest-amd64"
+  - id: agent-cli-docker-arm64
+    use: buildx
+    dockerfile: Dockerfile.release
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/alvarolobato/agent-cli:{{ .Version }}-arm64"
+      - "ghcr.io/alvarolobato/agent-cli:latest-arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/alvarolobato/agent-cli:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/alvarolobato/agent-cli:{{ .Version }}-amd64"
+      - "ghcr.io/alvarolobato/agent-cli:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/alvarolobato/agent-cli:latest"
+    image_templates:
+      - "ghcr.io/alvarolobato/agent-cli:latest-amd64"
+      - "ghcr.io/alvarolobato/agent-cli:latest-arm64"
 
 changelog:
   use: git

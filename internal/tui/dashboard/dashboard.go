@@ -56,6 +56,34 @@ func (m *Model) MoveDown() {
 	}
 }
 
+func (m Model) SelectedColumn() int {
+	return m.cursor
+}
+
+func (m Model) FirstNodeForColumn() *pipeline.Node {
+	leftKind, rightKind := "input", "output"
+	if m.usesOTel {
+		leftKind, rightKind = "receiver", "exporter"
+	}
+	var kind string
+	switch m.cursor {
+	case 0:
+		kind = leftKind
+	case 1:
+		kind = "processor"
+	case 2:
+		kind = rightKind
+	default:
+		return nil
+	}
+	nodes := m.nodesByKind(kind)
+	if len(nodes) == 0 {
+		return nil
+	}
+	node := nodes[0]
+	return &node
+}
+
 func (m Model) View() string {
 	leftKind, rightKind := "input", "output"
 	if m.usesOTel {
@@ -64,7 +92,8 @@ func (m Model) View() string {
 	left := renderColumn(m.items[0], m.nodesByKind(leftKind), m.cursor == 0)
 	processors := renderColumn(m.items[1], m.nodesByKind("processor"), m.cursor == 1)
 	right := renderColumn(m.items[2], m.nodesByKind(rightKind), m.cursor == 2)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, processors, right)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, left, processors, right)
+	return metadataHeader(m.pipe) + content
 }
 
 func (m Model) nodesByKind(kind string) []pipeline.Node {
@@ -143,4 +172,23 @@ func columnTitles(usesOTel bool) []string {
 		return []string{"Receivers", "Processors", "Exporters"}
 	}
 	return []string{"Inputs", "Processors", "Outputs"}
+}
+
+func metadataHeader(p *pipeline.Pipeline) string {
+	if p == nil || len(p.Metadata) == 0 {
+		return ""
+	}
+	version := strings.TrimSpace(p.Metadata["agent_version"])
+	flavor := strings.TrimSpace(p.Metadata["agent_flavor"])
+	if version == "" && flavor == "" {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if version != "" {
+		parts = append(parts, "version "+version)
+	}
+	if flavor != "" {
+		parts = append(parts, "flavor "+flavor)
+	}
+	return "Agent " + strings.Join(parts, " | ") + "\n\n"
 }
