@@ -1,121 +1,120 @@
 # agent-cli
 
-`agent-cli` is a Go CLI/TUI for inspecting observability agent pipelines and health.
+`agent-cli` is a cross-agent CLI and TUI for Elastic Agent, EDOT Collector, and OpenTelemetry Collector.
 
-Supported targets today:
+## Installation
 
-- Elastic Agent
-- EDOT Collector
-- Generic OpenTelemetry Collector
+### Download from GitHub Releases
 
-## Project Description
+Use binaries from the project's [GitHub Releases](https://github.com/alvarolobato/agent-cli/releases).
 
-`agent-cli` is a terminal-first operational tool for understanding how telemetry is flowing through local agent pipelines and where it is failing.
-
-It combines static configuration parsing with live runtime signals so operators can:
-
-- inspect pipeline topology (`inputs/receivers -> processors -> outputs/exporters`)
-- assess normalized component health (`healthy`, `degraded`, `error`, `disabled`, `unknown`)
-- view key throughput and failure indicators (events, drops, send failures)
-- spot misconfigurations such as missing wiring or disabled/orphaned components
-- use both human-oriented terminal views (table/TUI) and machine-friendly output (`--format json`)
-
-The codebase uses a layered adapter architecture so each agent type maps into a shared pipeline model:
-
-- Elastic Agent adapter
-- EDOT adapter
-- Generic OTel adapter
-
-## Project Status
-
-- **Merged:** Phase 0, Phase 1A, Phase 1B, Phase 1C
-- **Planned:** Phase 1D, Phase 1E, Phase 2
-
-Roadmap issue: [#2](https://github.com/alvarolobato/agent-cli/issues/2)
-
-## Install
-
-Prerequisites: Go `1.24+`
+### Build from source
 
 ```bash
-git clone https://github.com/alvarolobato/agent-cli.git
-cd agent-cli
-make build
-./bin/agent-cli --help
+go build ./cmd/agent-cli
+./agent-cli --help
 ```
 
-Alternative without Make:
+### Docker
 
 ```bash
-go build -o bin/agent-cli ./cmd/agent-cli
-./bin/agent-cli --help
+docker build -t agent-cli .
+docker run --rm --net=host agent-cli --help
+docker run --rm --net=host agent-cli status
 ```
 
 ## Quick Start
 
 ```bash
-agent-cli discover
+# Auto-detect or use defaults
 agent-cli status
-agent-cli status --format json
-agent-cli tui
+
+# Point directly to an install/config directory
+agent-cli status --path /opt/Elastic/Agent
+agent-cli status --path /etc/otelcol
+
+# Launch interactive TUI
+agent-cli tui --path /opt/Elastic/Agent
+agent-cli tui --refresh 5s
 ```
 
-## Common Usage
+## Commands
 
-Elastic Agent:
+- `agent-cli status`: Pipeline status report (ASCII diagram + table, or JSON).
+- `agent-cli tui`: Interactive dashboard with drill-down screens.
+- `agent-cli discover`: Local discovery strategies summary.
+- `agent-cli completion <shell>`: Shell completion scripts.
 
-```bash
-agent-cli status --agent elastic-agent
-agent-cli status --agent elastic-agent --format json
-```
-
-EDOT:
+### `status` examples
 
 ```bash
+agent-cli status --agent elastic-agent --elastic-config /opt/Elastic/Agent/elastic-agent.yml
 agent-cli status --agent edot --edot-config /etc/edot/config.yaml
-```
-
-OTel:
-
-```bash
 agent-cli status --agent otel --otel-config /etc/otelcol/config.yaml
+agent-cli status --format json
 ```
 
-For full command options:
+### `tui` examples
 
 ```bash
-agent-cli --help
-agent-cli status --help
-agent-cli discover --help
-agent-cli tui --help
+agent-cli tui --agent elastic-agent
+agent-cli tui --live
+agent-cli tui --refresh 5s
+```
+
+## Supported Agents
+
+- Elastic Agent (`elastic-agent`)
+- EDOT Collector (`edot`)
+- OpenTelemetry Collector (`otel`)
+
+## Output Example (ASCII Pipeline)
+
+```text
+INPUTS                             PROCESSORS                         OUTPUTS
+--------------------------------------------------------------------------------------------------------
+✓ system-logs (in 120.0/s out 118.0/s err 0) ✓ batch (in 118.0/s out 118.0/s err 0) ✓ default (in 118.0/s out 118.0/s err 0)
+```
+
+## TUI Keyboard Shortcuts
+
+- `up/down` or `left/right`: Move between dashboard columns
+- `Enter`: Open detail screen for selected lane
+- `e`: Open errors and warnings screen
+- `c`: Open raw config screen
+- `r`: Manual refresh timestamp update
+- `l`: Toggle live mode
+- `Esc` / `b`: Back to dashboard
+- `q`: Quit
+
+## Shell Completion
+
+```bash
+# bash
+agent-cli completion bash > /etc/bash_completion.d/agent-cli
+
+# zsh
+source <(agent-cli completion zsh)
+
+# fish
+agent-cli completion fish | source
+
+# powershell
+agent-cli completion powershell > agent-cli.ps1
+```
+
+## Development
+
+```bash
+go build ./...
+go test ./...
+go vet ./...
+golangci-lint run
 ```
 
 ## Contributing
 
-1. Pick or create a scoped issue.
-2. Create a branch from `main`.
-3. Implement with tests.
-4. Run checks:
-
-```bash
-go build ./...
-go test -race ./...
-go vet ./...
-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
-```
-
-5. Open a PR referencing the issue (`Closes #<issue-number>`).
-
-## Additional Documentation
-
-Deep-dive usage, architecture overview, troubleshooting, and implementation links:
-
-- [`docs/usage-and-troubleshooting.md`](docs/usage-and-troubleshooting.md)
-- [`architecture.md`](architecture.md)
-- [`decision-log.md`](decision-log.md)
-- [`project-requirements.md`](project-requirements.md)
-- [`AGENTS.md`](AGENTS.md)
-
-## License
-
-No license file is currently present in the repository.
+1. Create a feature branch from `main`.
+2. Run all checks locally.
+3. Open a pull request that references the issue (`Closes #<issue>`).
+4. Wait for CI and code review before merge.

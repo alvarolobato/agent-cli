@@ -22,6 +22,7 @@ func newTUICommand() *cobra.Command {
 	var otelZPagesURL string
 	var otelMetricsURL string
 	var otelHealthURL string
+	var installPath string
 
 	cmd := &cobra.Command{
 		Use:   "tui",
@@ -46,6 +47,7 @@ func newTUICommand() *cobra.Command {
 				otelMetricsURLSet: cmd.Flags().Changed("otel-metrics-url"),
 				otelHealthURL:     otelHealthURL,
 				otelHealthURLSet:  cmd.Flags().Changed("otel-health-url"),
+				path:              installPath,
 			})
 			if err != nil {
 				return err
@@ -57,7 +59,7 @@ func newTUICommand() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&live, "live", false, "Enable live mode auto-refresh")
-	cmd.Flags().DurationVar(&refresh, "refresh", 5*time.Second, "Refresh interval in live mode")
+	cmd.Flags().DurationVar(&refresh, "refresh", 0, "Refresh interval in live mode (enables live mode when set)")
 	cmd.Flags().StringVar(&agentType, "agent", "", "Target a specific agent type")
 	cmd.Flags().StringVar(&elasticConfigPath, "elastic-config", "", "Path to elastic-agent.yml (auto-detected when omitted)")
 	cmd.Flags().StringVar(&elasticStatusURL, "elastic-url", "http://localhost:6791", "Elastic Agent status API base URL")
@@ -69,6 +71,8 @@ func newTUICommand() *cobra.Command {
 	cmd.Flags().StringVar(&otelZPagesURL, "otel-zpages-url", "http://localhost:55679", "OTel zpages base URL")
 	cmd.Flags().StringVar(&otelMetricsURL, "otel-metrics-url", "http://localhost:8888/metrics", "OTel Prometheus metrics endpoint")
 	cmd.Flags().StringVar(&otelHealthURL, "otel-health-url", "http://localhost:13133/", "OTel health_check endpoint")
+	bindPathFlags(cmd, &installPath)
+	registerAgentFlagCompletion(cmd)
 
 	return cmd
 }

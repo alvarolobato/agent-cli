@@ -17,6 +17,7 @@ func TestModelViewRendersPipelineColumns(t *testing.T) {
 			{ID: "output.default", Label: "default", Kind: "output", Status: pipeline.Error},
 		},
 		UpdatedAt: time.Now().UTC(),
+		Metadata:  map[string]string{"agent_version": "9.3.1", "agent_flavor": "servers"},
 	})
 
 	view := model.View()
@@ -24,6 +25,9 @@ func TestModelViewRendersPipelineColumns(t *testing.T) {
 		if !strings.Contains(view, token) {
 			t.Fatalf("expected %q in dashboard view, got:\n%s", token, view)
 		}
+	}
+	if !strings.Contains(view, "version 9.3.1") {
+		t.Fatalf("expected metadata header in dashboard view, got:\n%s", view)
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -304,5 +306,50 @@ func TestAutoDetectStatusOptionsErrorsWhenPreferredTypeIsAmbiguous(t *testing.T)
 	}
 	if !strings.Contains(err.Error(), "multiple elastic-agent agents discovered") {
 		t.Fatalf("unexpected ambiguity error: %v", err)
+	}
+}
+
+func TestResolveStatusOptionsFromPathElasticAgent(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".flavor"), []byte("basic"), 0o644); err != nil {
+		t.Fatalf("write .flavor: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "elastic-agent.yml"), []byte("outputs: {}"), 0o644); err != nil {
+		t.Fatalf("write elastic-agent.yml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "otel.yml"), []byte("service:\n  pipelines: {}"), 0o644); err != nil {
+		t.Fatalf("write otel.yml: %v", err)
+	}
+
+	options, err := resolveStatusOptionsFromPath(statusOptions{path: root})
+	if err != nil {
+		t.Fatalf("resolveStatusOptionsFromPath() error = %v", err)
+	}
+	if options.agentType != "elastic-agent" {
+		t.Fatalf("agent type = %q, want elastic-agent", options.agentType)
+	}
+	if !strings.HasSuffix(options.elasticConfig, "elastic-agent.yml") {
+		t.Fatalf("elastic config = %q, expected elastic-agent.yml", options.elasticConfig)
+	}
+	if !strings.HasSuffix(options.elasticOTelConfig, "otel.yml") {
+		t.Fatalf("elastic otel config = %q, expected otel.yml", options.elasticOTelConfig)
+	}
+}
+
+func TestResolveStatusOptionsFromPathOTelConfigDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "config.yaml"), []byte("service:\n  pipelines: {}"), 0o644); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	options, err := resolveStatusOptionsFromPath(statusOptions{path: root})
+	if err != nil {
+		t.Fatalf("resolveStatusOptionsFromPath() error = %v", err)
+	}
+	if options.agentType != "otel" {
+		t.Fatalf("agent type = %q, want otel", options.agentType)
+	}
+	if !strings.HasSuffix(options.otelConfig, "config.yaml") {
+		t.Fatalf("otel config = %q, expected config.yaml", options.otelConfig)
 	}
 }

@@ -22,6 +22,22 @@ func fixturePipeline() *pipeline.Pipeline {
 	}
 }
 
+func fixturePipelineDiagram() *pipeline.Pipeline {
+	return &pipeline.Pipeline{
+		Name: "fixture",
+		Nodes: []pipeline.Node{
+			{ID: "in", Label: "input", Kind: "input", Status: pipeline.Healthy, Metrics: &pipeline.NodeMetrics{EventsInPerSec: 101, EventsOutPerSec: 100, ErrorCount: 1}},
+			{ID: "proc", Label: "batch", Kind: "processor", Status: pipeline.Healthy, Metrics: &pipeline.NodeMetrics{EventsInPerSec: 100, EventsOutPerSec: 98, ErrorCount: 0}},
+			{ID: "out", Label: "output", Kind: "output", Status: pipeline.Degraded, Metrics: &pipeline.NodeMetrics{EventsInPerSec: 98, EventsOutPerSec: 97, ErrorCount: 2}},
+		},
+		Edges: []pipeline.Edge{
+			{From: "in", To: "proc"},
+			{From: "proc", To: "out"},
+		},
+		UpdatedAt: time.Unix(100, 0).UTC(),
+	}
+}
+
 func fixtureOTelPipeline() *pipeline.Pipeline {
 	return &pipeline.Pipeline{
 		Name: "edot",
@@ -60,6 +76,14 @@ func TestRenderTableEDOT(t *testing.T) {
 		t.Fatalf("expected EDOT receiver component in table output, got: %s", got)
 	}
 	assertGolden(t, "edot-status-table.golden", got)
+}
+
+func TestRenderPipeline(t *testing.T) {
+	got := RenderPipeline(fixturePipelineDiagram())
+	if !strings.Contains(got, "INPUTS") {
+		t.Fatalf("expected pipeline headers, got: %s", got)
+	}
+	assertGolden(t, "pipeline-diagram.golden", got)
 }
 
 func assertGolden(t *testing.T, fileName, got string) {

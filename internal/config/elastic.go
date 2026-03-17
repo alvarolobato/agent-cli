@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -61,7 +63,17 @@ func ParseElasticAgentConfig(path string) (*ElasticAgentConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read elastic agent config: %w", err)
 	}
-	return ParseElasticAgentConfigBytes(data)
+	cfg, err := ParseElasticAgentConfigBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	if !isElasticAgentMainConfig(path) {
+		return cfg, nil
+	}
+	if err := mergeInputsDirConfigs(path, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // ParseElasticAgentConfigBytes parses raw YAML bytes into ElasticAgentConfig.
@@ -87,6 +99,18 @@ func augmentFromOTELPipelines(data []byte, cfg *ElasticAgentConfig) {
 
 	otelCfg, err := ParseOTelCollectorConfigBytes(data)
 	if err != nil {
+		return
+	}
+	mergeFromOTelCollectorConfig(cfg, otelCfg)
+}
+
+// MergeFromOTelCollectorConfig merges OTel pipeline wiring into ElasticAgentConfig.
+func MergeFromOTelCollectorConfig(cfg *ElasticAgentConfig, otelCfg *OTelCollectorConfig) {
+	mergeFromOTelCollectorConfig(cfg, otelCfg)
+}
+
+func mergeFromOTelCollectorConfig(cfg *ElasticAgentConfig, otelCfg *OTelCollectorConfig) {
+	if cfg == nil || otelCfg == nil {
 		return
 	}
 	if len(otelCfg.Service.Pipelines) == 0 && len(otelCfg.Exporters) == 0 {
@@ -184,4 +208,47 @@ func stringSliceFromRaw(raw map[string]interface{}, key string) []string {
 		out = append(out, str)
 	}
 	return out
+}
+
+func isElasticAgentMainConfig(path string) bool {
+	base := strings.ToLower(filepath.Base(filepath.Clean(path)))
+	return base == "elastic-agent.yml" || base == "elastic-agent.yaml"
+}
+
+func mergeInputsDirConfigs(mainPath string, cfg *ElasticAgentConfig) error {
+	inputsDir := filepath.Join(filepath.Dir(mainPath), "inputs.d")
+	entries, err := os.ReadDir(inputsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read inputs.d directory: %w", err)
+	}
+
+	files := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(entry.Name()))
+		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+		files = append(files, filepath.Join(inputsDir, entry.Name()))
+	}
+	sort.Strings(files)
+
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read inputs.d config %q: %w", path, err)
+		}
+		fragment, err := ParseElasticAgentConfigBytes(raw)
+		if err != nil {
+			return fmt.Errorf("parse inputs.d config %q: %w", path, err)
+		}
+		cfg.Inputs = append(cfg.Inputs, fragment.Inputs...)
+	}
+
+	return nil
 }

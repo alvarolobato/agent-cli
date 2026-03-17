@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ func newStatusCommand() *cobra.Command {
 	var otelZPagesURL string
 	var otelMetricsURL string
 	var otelHealthURL string
+	var installPath string
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -58,6 +60,7 @@ func newStatusCommand() *cobra.Command {
 				otelMetricsURLSet: cmd.Flags().Changed("otel-metrics-url"),
 				otelHealthURL:     otelHealthURL,
 				otelHealthURLSet:  cmd.Flags().Changed("otel-health-url"),
+				path:              installPath,
 			})
 			if err != nil {
 				return err
@@ -72,7 +75,13 @@ func newStatusCommand() *cobra.Command {
 				cmd.Println(out)
 				return nil
 			case "table":
-				cmd.Println(output.RenderTable(model))
+				diagram := output.RenderPipeline(model)
+				table := output.RenderTable(model)
+				if strings.TrimSpace(diagram) != "" {
+					cmd.Println(diagram)
+					cmd.Println()
+				}
+				cmd.Println(table)
 				return nil
 			default:
 				return errors.New("unsupported --format value (use: table|json)")
@@ -92,6 +101,8 @@ func newStatusCommand() *cobra.Command {
 	cmd.Flags().StringVar(&otelZPagesURL, "otel-zpages-url", "http://localhost:55679", "OTel zpages base URL")
 	cmd.Flags().StringVar(&otelMetricsURL, "otel-metrics-url", "http://localhost:8888/metrics", "OTel Prometheus metrics endpoint")
 	cmd.Flags().StringVar(&otelHealthURL, "otel-health-url", "http://localhost:13133/", "OTel health_check endpoint")
+	bindPathFlags(cmd, &installPath)
+	registerAgentFlagCompletion(cmd)
 
 	return cmd
 }
@@ -99,6 +110,7 @@ func newStatusCommand() *cobra.Command {
 type statusOptions struct {
 	agentType         string
 	elasticConfig     string
+	elasticOTelConfig string
 	elasticStatusURL  string
 	elasticURLSet     bool
 	edotConfig        string
@@ -115,6 +127,8 @@ type statusOptions struct {
 	otelMetricsURLSet bool
 	otelHealthURL     string
 	otelHealthURLSet  bool
+	path              string
+	discoveredMeta    map[string]string
 }
 
 var discoverAgents = func(ctx context.Context) ([]discovery.DiscoveredAgent, error) {
@@ -122,12 +136,17 @@ var discoverAgents = func(ctx context.Context) ([]discovery.DiscoveredAgent, err
 }
 
 func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeline, error) {
+	var err error
+	options, err = resolveStatusOptionsFromPath(options)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if options.agentType == "" {
-		var err error
 		options, err = autoDetectStatusOptions(ctx, options)
 		if err != nil {
 			return nil, err
@@ -140,15 +159,32 @@ func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeli
 		if err != nil {
 			return nil, err
 		}
-		cfg, err := config.ParseElasticAgentConfig(configPath)
+		inspectResult, err := config.ParseElasticAgentConfigWithInspect(ctx, configPath, nil)
 		if err != nil {
 			return nil, err
+		}
+		cfg := inspectResult.Config
+		if otelPath := strings.TrimSpace(options.elasticOTelConfig); otelPath != "" {
+			otelCfg, err := config.ParseOTelCollectorConfig(otelPath)
+			if err != nil {
+				return nil, fmt.Errorf("parse supplemental elastic otel config: %w", err)
+			}
+			config.MergeFromOTelCollectorConfig(cfg, otelCfg)
 		}
 
 		httpClient := &http.Client{Timeout: 5 * time.Second}
 		client := elasticagent.NewClient(options.elasticStatusURL, httpClient)
 		adapter := elasticagent.NewAdapter(cfg, client)
-		return adapter.Status(ctx)
+		pipe, err := adapter.Status(ctx)
+		if err != nil {
+			return nil, err
+		}
+		attachDiscoveredMetadata(pipe, options.discoveredMeta)
+		if pipe.Metadata == nil {
+			pipe.Metadata = map[string]string{}
+		}
+		pipe.Metadata["config_source"] = inspectResult.Source
+		return pipe, nil
 	case "edot":
 		if strings.TrimSpace(options.edotConfig) == "" {
 			return nil, errors.New("edot config not found; pass --edot-config")
@@ -166,7 +202,12 @@ func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeli
 			PrometheusURL:  options.edotMetricsURL,
 			HealthCheckURL: options.edotHealthURL,
 		})
-		return adapter.Status(ctx)
+		pipe, err := adapter.Status(ctx)
+		if err != nil {
+			return nil, err
+		}
+		attachDiscoveredMetadata(pipe, options.discoveredMeta)
+		return pipe, nil
 	case "otel":
 		if strings.TrimSpace(options.otelConfig) == "" {
 			return nil, errors.New("otel config not found; pass --otel-config")
@@ -184,7 +225,12 @@ func statusPipeline(cmd *cobra.Command, options statusOptions) (*pipeline.Pipeli
 			PrometheusURL:  options.otelMetricsURL,
 			HealthCheckURL: options.otelHealthURL,
 		})
-		return adapter.Status(ctx)
+		pipe, err := adapter.Status(ctx)
+		if err != nil {
+			return nil, err
+		}
+		attachDiscoveredMetadata(pipe, options.discoveredMeta)
+		return pipe, nil
 	default:
 		return nil, fmt.Errorf("unsupported --agent value %q", options.agentType)
 	}
@@ -204,6 +250,7 @@ func autoDetectStatusOptions(ctx context.Context, options statusOptions) (status
 		return options, bestErr
 	}
 	options.agentType = best.AgentType
+	options.discoveredMeta = best.Metadata
 
 	switch best.AgentType {
 	case "elastic-agent":
@@ -239,6 +286,56 @@ func autoDetectStatusOptions(ctx context.Context, options statusOptions) (status
 		if endpoint, ok := best.Endpoints["health"]; ok && !options.otelHealthURLSet {
 			options.otelHealthURL = endpoint + "/"
 		}
+	}
+
+	return options, nil
+}
+
+func resolveStatusOptionsFromPath(options statusOptions) (statusOptions, error) {
+	path := strings.TrimSpace(options.path)
+	if path == "" {
+		return options, nil
+	}
+
+	discovered, err := discovery.DiscoverAgentAtPath(path)
+	if err != nil {
+		return options, err
+	}
+
+	if options.agentType != "" && options.agentType != discovered.AgentType {
+		return options, fmt.Errorf("requested --agent %q but %q looks like %q", options.agentType, path, discovered.AgentType)
+	}
+	options.agentType = discovered.AgentType
+	options.discoveredMeta = discovered.Metadata
+
+	switch discovered.AgentType {
+	case "elastic-agent":
+		if strings.TrimSpace(options.elasticConfig) == "" {
+			configPath := firstConfigPathByBaseName(discovered.ConfigPaths, "elastic-agent.yml", "elastic-agent.yaml")
+			if configPath == "" {
+				return options, fmt.Errorf("elastic agent config not found under %q", path)
+			}
+			options.elasticConfig = configPath
+		}
+		if strings.TrimSpace(options.elasticOTelConfig) == "" {
+			options.elasticOTelConfig = firstConfigPathByBaseName(discovered.ConfigPaths, "otel.yml", "otel.yaml")
+		}
+	case "edot":
+		if strings.TrimSpace(options.edotConfig) == "" {
+			options.edotConfig = firstCollectorConfigPath(discovered.ConfigPaths)
+		}
+		if options.edotConfig == "" {
+			return options, fmt.Errorf("edot config not found under %q", path)
+		}
+	case "otel":
+		if strings.TrimSpace(options.otelConfig) == "" {
+			options.otelConfig = firstCollectorConfigPath(discovered.ConfigPaths)
+		}
+		if options.otelConfig == "" {
+			return options, fmt.Errorf("otel config not found under %q", path)
+		}
+	default:
+		return options, fmt.Errorf("unsupported discovered agent type %q", discovered.AgentType)
 	}
 
 	return options, nil
@@ -281,6 +378,57 @@ func discoveryPriority(agentType string) int {
 	default:
 		return 3
 	}
+}
+
+func attachDiscoveredMetadata(pipe *pipeline.Pipeline, metadata map[string]string) {
+	if pipe == nil || len(metadata) == 0 {
+		return
+	}
+	if pipe.Metadata == nil {
+		pipe.Metadata = map[string]string{}
+	}
+	for key, value := range metadata {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		pipe.Metadata[key] = value
+	}
+}
+
+func firstCollectorConfigPath(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	// Prefer conventional collector config names before falling back.
+	if config := firstConfigPathByBaseName(paths, "config.yaml", "config.yml", "otel.yml", "otel.yaml"); config != "" {
+		return config
+	}
+	for _, path := range paths {
+		lower := strings.ToLower(filepath.Base(path))
+		if strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".yaml") {
+			return path
+		}
+	}
+	return ""
+}
+
+func firstConfigPathByBaseName(paths []string, names ...string) string {
+	if len(paths) == 0 || len(names) == 0 {
+		return ""
+	}
+	lookup := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		lookup[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	}
+	for _, path := range paths {
+		base := strings.ToLower(filepath.Base(path))
+		if _, ok := lookup[base]; ok {
+			return path
+		}
+	}
+	return ""
 }
 
 func resolveElasticConfigPath(explicitPath string) (string, error) {

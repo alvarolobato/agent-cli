@@ -167,6 +167,7 @@ func parsePSLine(line string) (ProcessInfo, bool) {
 
 func classifyProcess(proc ProcessInfo) (agentType string, role string, child bool) {
 	name := filepath.Base(proc.Name)
+	primaryArg := strings.ToLower(strings.TrimSpace(firstArg(proc.Args)))
 	switch name {
 	case "elastic-agent":
 		if len(proc.Args) > 0 && proc.Args[0] == "otel" {
@@ -174,7 +175,14 @@ func classifyProcess(proc ProcessInfo) (agentType string, role string, child boo
 		}
 		return "elastic-agent", "", false
 	case "elastic-otel-collector", "edot-collector":
-		return "edot", "otel-collector", true
+		// EA >= 9.3 uses elastic-otel-collector as a beat runner too.
+		if isBeatSubcommand(primaryArg) {
+			return "elastic-agent", primaryArg, true
+		}
+		if hasArg(proc.Args, "--supervised") || primaryArg == "" {
+			return "edot", "otel-collector", true
+		}
+		return "edot", "otel-collector", false
 	case "agentbeat":
 		if len(proc.Args) > 0 {
 			switch proc.Args[0] {
@@ -191,6 +199,39 @@ func classifyProcess(proc ProcessInfo) (agentType string, role string, child boo
 		return "otel", "otel-collector", false
 	default:
 		return "", "", false
+	}
+}
+
+func firstArg(args []string) string {
+	for _, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if trimmed == "" || strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		return trimmed
+	}
+	return ""
+}
+
+func hasArg(args []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func isBeatSubcommand(value string) bool {
+	switch value {
+	case "filebeat", "metricbeat", "osquerybeat", "heartbeat", "auditbeat", "packetbeat":
+		return true
+	default:
+		return false
 	}
 }
 
