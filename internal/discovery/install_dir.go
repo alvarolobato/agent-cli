@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alvarolobato/agent-cli/internal/agent"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,14 +19,6 @@ const (
 	agentTypeEDOT    = "edot"
 	agentTypeOTel    = "otel"
 )
-
-// DiscoveredAgent captures installation root and discovered configs.
-type DiscoveredAgent struct {
-	Type        string
-	InstallPath string
-	ConfigPaths []string
-	Metadata    map[string]string
-}
 
 type installDirFS interface {
 	Stat(name string) (fs.FileInfo, error)
@@ -79,8 +70,8 @@ func DiscoverAgentAtPath(path string) (DiscoveredAgent, error) {
 	return scanner.discoverAtPath(path)
 }
 
-func (s *installDirScanner) Discover(ctx context.Context) ([]agent.Agent, error) {
-	out := make([]agent.Agent, 0, len(s.candidateDirs))
+func (s *installDirScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error) {
+	out := make([]DiscoveredAgent, 0, len(s.candidateDirs))
 	for _, root := range s.candidateDirs {
 		select {
 		case <-ctx.Done():
@@ -95,9 +86,13 @@ func (s *installDirScanner) Discover(ctx context.Context) ([]agent.Agent, error)
 		if !ok {
 			continue
 		}
-		out = append(out, stubAgent{
-			id:   discovered.InstallPath,
-			kind: discovered.Type,
+		out = append(out, DiscoveredAgent{
+			AgentType:   discovered.AgentType,
+			ConfigPath:  selectPrimaryConfigPath(discovered.ConfigPaths),
+			InstallPath: discovered.InstallPath,
+			ConfigPaths: discovered.ConfigPaths,
+			Metadata:    discovered.Metadata,
+			Source:      "path",
 		})
 	}
 	return out, nil
@@ -131,7 +126,7 @@ func (s *installDirScanner) discoverAtPath(path string) (DiscoveredAgent, error)
 	}
 
 	return DiscoveredAgent{
-		Type:        agentType,
+		AgentType:   agentType,
 		InstallPath: root,
 		ConfigPaths: configPaths,
 		Metadata:    discoverInstallMetadata(root, configPaths, s.fsys),
@@ -155,7 +150,7 @@ func (s *installDirScanner) scanInstallDir(root string) (DiscoveredAgent, bool, 
 	}
 
 	return DiscoveredAgent{
-		Type:        agentType,
+		AgentType:   agentType,
 		InstallPath: root,
 		ConfigPaths: configPaths,
 		Metadata:    discoverInstallMetadata(root, configPaths, s.fsys),
@@ -407,4 +402,17 @@ func firstManifestString(payload map[string]interface{}, keys ...string) string 
 		}
 	}
 	return ""
+}
+
+func selectPrimaryConfigPath(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	for _, path := range paths {
+		name := strings.ToLower(filepath.Base(path))
+		if name == "elastic-agent.yml" || name == "elastic-agent.yaml" || name == "config.yml" || name == "config.yaml" {
+			return path
+		}
+	}
+	return paths[0]
 }

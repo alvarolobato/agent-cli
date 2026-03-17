@@ -48,16 +48,23 @@ type DiscoveredAgent struct {
 	Endpoints  map[string]string
 	Children   []DiscoveredChild
 	Source     string
+	InstallPath string
+	ConfigPaths []string
+	Metadata    map[string]string
 }
 
 func (a DiscoveredAgent) ID() string {
+	agentType := a.AgentType
 	if a.PID > 0 {
-		return fmt.Sprintf("%s:%d", a.AgentType, a.PID)
+		return fmt.Sprintf("%s:%d", agentType, a.PID)
 	}
 	if a.ConfigPath != "" {
-		return fmt.Sprintf("%s:%s", a.AgentType, a.ConfigPath)
+		return fmt.Sprintf("%s:%s", agentType, a.ConfigPath)
 	}
-	return a.AgentType
+	if a.InstallPath != "" {
+		return fmt.Sprintf("%s:%s", agentType, a.InstallPath)
+	}
+	return agentType
 }
 
 func (a DiscoveredAgent) Type() string {

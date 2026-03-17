@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/alvarolobato/agent-cli/internal/agent"
 )
 
 const (
@@ -35,7 +33,7 @@ func NewServiceScanner() Strategy {
 	}
 }
 
-func (s *serviceScanner) Discover(ctx context.Context) ([]agent.Agent, error) {
+func (s *serviceScanner) Discover(ctx context.Context) ([]DiscoveredAgent, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -52,8 +50,15 @@ func (s *serviceScanner) Discover(ctx context.Context) ([]agent.Agent, error) {
 		return nil, err
 	}
 
-	return []agent.Agent{
-		stubAgent{id: discovered.InstallPath, kind: discovered.Type},
+	return []DiscoveredAgent{
+		{
+			AgentType:   discovered.AgentType,
+			ConfigPath:  selectPrimaryConfigPath(discovered.ConfigPaths),
+			InstallPath: discovered.InstallPath,
+			ConfigPaths: discovered.ConfigPaths,
+			Metadata:    discovered.Metadata,
+			Source:      "path",
+		},
 	}, nil
 }
 

@@ -35,8 +35,8 @@ func TestInstallDirScannerDetectsElasticAgentInstallAndConfigs(t *testing.T) {
 	if !ok {
 		t.Fatalf("scanInstallDir() expected detected install dir")
 	}
-	if got.Type != agentTypeElastic {
-		t.Fatalf("scanInstallDir() type = %q, want %q", got.Type, agentTypeElastic)
+	if got.AgentType != agentTypeElastic {
+		t.Fatalf("scanInstallDir() type = %q, want %q", got.AgentType, agentTypeElastic)
 	}
 	if got.InstallPath != root {
 		t.Fatalf("scanInstallDir() install path = %q, want %q", got.InstallPath, root)
@@ -66,8 +66,8 @@ func TestInstallDirScannerDiscoverAtPathFallsBackToConfigDirectory(t *testing.T)
 	if err != nil {
 		t.Fatalf("discoverAtPath() error = %v", err)
 	}
-	if got.Type != agentTypeOTel {
-		t.Fatalf("discoverAtPath() type = %q, want %q", got.Type, agentTypeOTel)
+	if got.AgentType != agentTypeOTel {
+		t.Fatalf("discoverAtPath() type = %q, want %q", got.AgentType, agentTypeOTel)
 	}
 	if len(got.ConfigPaths) != 1 || got.ConfigPaths[0] != filepath.Join(root, "config.yaml") {
 		t.Fatalf("discoverAtPath() config paths = %#v", got.ConfigPaths)
@@ -86,8 +86,8 @@ func TestInstallDirScannerDiscoverAtPathInfersEDOTByDirectoryName(t *testing.T) 
 	if err != nil {
 		t.Fatalf("discoverAtPath() error = %v", err)
 	}
-	if got.Type != agentTypeEDOT {
-		t.Fatalf("discoverAtPath() type = %q, want %q", got.Type, agentTypeEDOT)
+	if got.AgentType != agentTypeEDOT {
+		t.Fatalf("discoverAtPath() type = %q, want %q", got.AgentType, agentTypeEDOT)
 	}
 }
 

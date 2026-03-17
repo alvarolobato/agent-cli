@@ -302,13 +302,13 @@ func resolveStatusOptionsFromPath(options statusOptions) (statusOptions, error) 
 		return options, err
 	}
 
-	if options.agentType != "" && options.agentType != discovered.Type {
-		return options, fmt.Errorf("requested --agent %q but %q looks like %q", options.agentType, path, discovered.Type)
+	if options.agentType != "" && options.agentType != discovered.AgentType {
+		return options, fmt.Errorf("requested --agent %q but %q looks like %q", options.agentType, path, discovered.AgentType)
 	}
-	options.agentType = discovered.Type
+	options.agentType = discovered.AgentType
 	options.discoveredMeta = discovered.Metadata
 
-	switch discovered.Type {
+	switch discovered.AgentType {
 	case "elastic-agent":
 		if strings.TrimSpace(options.elasticConfig) == "" {
 			configPath := firstConfigPathByBaseName(discovered.ConfigPaths, "elastic-agent.yml", "elastic-agent.yaml")
@@ -335,7 +335,7 @@ func resolveStatusOptionsFromPath(options statusOptions) (statusOptions, error) 
 			return options, fmt.Errorf("otel config not found under %q", path)
 		}
 	default:
-		return options, fmt.Errorf("unsupported discovered agent type %q", discovered.Type)
+		return options, fmt.Errorf("unsupported discovered agent type %q", discovered.AgentType)
 	}
 
 	return options, nil
